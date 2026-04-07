@@ -1676,6 +1676,128 @@ class AmalFatimahApiService
     }
 
     /**
+     * @return array{unpaid?: list<array<string,mixed>>, paid?: list<array<string,mixed>>, error?: string}
+     */
+    public function getEditManualBillsByCustid(int $custid): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getEditManualBillsByCustid', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'getEditManualBillsByCustid',
+            'token' => $token,
+            'custid' => $custid,
+        ];
+
+        try {
+            $response = Http::timeout(45)->connectTimeout(15)->post($url, $body);
+            $json = $response->json() ?? [];
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'error' => (string) ($json['message'] ?? $data['error'] ?? 'Gagal memuat tagihan'),
+                    'unpaid' => [],
+                    'paid' => [],
+                ];
+            }
+
+            return [
+                'unpaid' => is_array($data['unpaid'] ?? null) ? array_values($data['unpaid']) : [],
+                'paid' => is_array($data['paid'] ?? null) ? array_values($data['paid']) : [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getEditManualBillsByCustid: ' . $e->getMessage());
+
+            return ['error' => 'Terjadi kesalahan saat menghubungi layanan', 'unpaid' => [], 'paid' => []];
+        }
+    }
+
+    /**
+     * @return array{lines?: list<array<string,mixed>>, paidst?: int, bill_aa?: int, error?: string}
+     */
+    public function getEditManualBillDetailRows(int $custid, string $billcd): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getEditManualBillDetailRows', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'getEditManualBillDetailRows',
+            'token' => $token,
+            'custid' => $custid,
+            'billcd' => trim($billcd),
+        ];
+
+        try {
+            $response = Http::timeout(45)->connectTimeout(15)->post($url, $body);
+            $json = $response->json() ?? [];
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'error' => (string) ($json['message'] ?? $data['error'] ?? 'Gagal memuat detail tagihan'),
+                ];
+            }
+
+            return [
+                'paidst' => (int) ($data['paidst'] ?? 0),
+                'bill_aa' => (int) ($data['bill_aa'] ?? 0),
+                'lines' => is_array($data['lines'] ?? null) ? array_values($data['lines']) : [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getEditManualBillDetailRows: ' . $e->getMessage());
+
+            return ['error' => 'Terjadi kesalahan saat menghubungi layanan'];
+        }
+    }
+
+    /**
+     * @param list<array{kode_post?: string, billam?: int}> $lines
+     * @return array{ok: bool, message: string, billam?: int}
+     */
+    public function saveEditManualBillDetail(int $custid, string $billcd, array $lines): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'saveEditManualBillDetail', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'saveEditManualBillDetail',
+            'token' => $token,
+            'custid' => $custid,
+            'billcd' => trim($billcd),
+            'lines' => array_values($lines),
+        ];
+
+        try {
+            $response = Http::timeout(120)->connectTimeout(25)->post($url, $body);
+            $json = $response->json() ?? [];
+            $st = (int) ($json['status'] ?? 0);
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+            $ok = $st === 200 && !empty($data['ok']);
+
+            if (!$ok) {
+                return [
+                    'ok' => false,
+                    'message' => (string) ($data['message'] ?? $json['message'] ?? 'Gagal menyimpan'),
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'message' => (string) ($data['message'] ?? 'Berhasil simpan.'),
+                'billam' => (int) ($data['billam'] ?? 0),
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] saveEditManualBillDetail: ' . $e->getMessage());
+
+            return ['ok' => false, 'message' => 'Terjadi kesalahan saat menghubungi layanan'];
+        }
+    }
+
+    /**
      * @param array<string, string> $filters
      * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>, meta: array<string, mixed>}}
      */

@@ -164,7 +164,10 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
     // Manual Input pages (ready)
     Route::prefix('manual-input')->name('manual_input.')->group(function () {
         Route::get('/edit-manual', [EditManualController::class, 'index'])->name('edit_manual');
-        Route::put('/edit-manual', [EditManualController::class, 'update'])->name('edit_manual.update');
+        Route::get('/edit-manual/siswa-rows', [EditManualController::class, 'siswaRows'])->name('edit_manual.siswa_rows');
+        Route::get('/edit-manual/bills', [EditManualController::class, 'bills'])->name('edit_manual.bills');
+        Route::get('/edit-manual/bill-detail', [EditManualController::class, 'billDetail'])->name('edit_manual.bill_detail');
+        Route::post('/edit-manual/save-bill-detail', [EditManualController::class, 'saveBillDetail'])->name('edit_manual.save_bill_detail');
         Route::get('/rekap-data', [RekapDataController::class, 'index'])->name('rekap_data');
     });
 
