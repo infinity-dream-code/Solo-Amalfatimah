@@ -7,6 +7,7 @@ use App\Services\AmalFatimahApiService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -122,9 +123,14 @@ class ExportImportDataController extends Controller
         $result = $api->importSiswaByFilePath($absolutePath, $originalName);
 
         if (!($result['ok'] ?? false)) {
+            Log::error('[Import Siswa] Request ke WS gagal', [
+                'file' => $originalName,
+                'stored_path' => $storedPath,
+                'result' => $result,
+            ]);
             return redirect()
                 ->route('master.export_import')
-                ->with('error', 'Gagal simpan data. Silakan coba lagi.');
+                ->with('error', (string) ($result['message'] ?? 'Gagal simpan data. Silakan coba lagi.'));
         }
 
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
@@ -139,7 +145,20 @@ class ExportImportDataController extends Controller
         );
 
         if ($errorCount > 0) {
-            $summary .= ' Sebagian data gagal diproses. Silakan hubungi admin untuk pengecekan hak akses database.';
+            $sampleErrors = array_slice($errorRows, 0, 3);
+            Log::warning('[Import Siswa] WS mengembalikan error per baris', [
+                'file' => $originalName,
+                'inserted' => (int) ($data['inserted'] ?? 0),
+                'updated' => (int) ($data['updated'] ?? 0),
+                'skipped' => (int) ($data['skipped'] ?? 0),
+                'error_count' => $errorCount,
+                'sample_errors' => $sampleErrors,
+            ]);
+
+            $first = $sampleErrors[0] ?? null;
+            $firstNis = is_array($first) ? (string) ($first['nis'] ?? '-') : '-';
+            $firstErr = is_array($first) ? (string) ($first['error'] ?? 'Error tidak diketahui') : 'Error tidak diketahui';
+            $summary .= " Contoh error [NIS {$firstNis}]: {$firstErr}";
         }
 
         Storage::delete($storedPath);
