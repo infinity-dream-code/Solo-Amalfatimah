@@ -110,14 +110,21 @@
                 <div class="mk-field-wrap">
                     <div>
                         <label class="mk-label">Unit <span class="mk-required">*</span></label>
-                        <select name="unit" class="mk-input" required>
-                            <option value="">Pilih Unit</option>
-                            @forelse (($unitOptions ?? []) as $unit)
-                                <option value="{{ $unit }}" {{ old('unit') === $unit ? 'selected' : '' }}>{{ $unit }}</option>
-                            @empty
-                                <option value="" disabled>Data unit tidak tersedia</option>
-                            @endforelse
-                        </select>
+                        <input
+                            name="unit"
+                            type="text"
+                            class="mk-input"
+                            list="unit-options"
+                            value="{{ old('unit') }}"
+                            placeholder="Cari / pilih unit"
+                            autocomplete="off"
+                            required
+                        >
+                        <datalist id="unit-options">
+                            @foreach (($unitOptions ?? []) as $unit)
+                                <option value="{{ $unit }}"></option>
+                            @endforeach
+                        </datalist>
                     </div>
 
                     <div>
