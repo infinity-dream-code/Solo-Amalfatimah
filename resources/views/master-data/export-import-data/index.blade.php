@@ -325,7 +325,7 @@
                 <ul class="eid-rules">
                     <li>File harus berformat <b>XLSX</b>.</li>
                     <li>Ukuran file tidak boleh lebih dari <b>1024KB / 1MB</b>.</li>
-                    <li>Kolom yang harus terisi: <b>NIS</b>, <b>KontakWali</b>.</li>
+                    <li>Kolom yang harus terisi: <b>NIS</b>.</li>
                     <li>Contoh file import:
                         <a href="{{ asset('format.xlsx') }}" target="_blank" rel="noopener">format.xlsx</a>
                     </li>

@@ -1387,7 +1387,7 @@ function importSiswa(array $req): array
         $colMap[strtoupper(trim((string) $col))] = $idx;
     }
 
-    $required = ["NIS", "KONTAKWALI"];
+    $required = ["NIS"];
     foreach ($required as $col) {
         if (!isset($colMap[$col])) {
             http_response_code(422);
@@ -1428,8 +1428,6 @@ function importSiswa(array $req): array
         $ayah       = $colGet("AYAH", $row);
         $ibu        = $colGet("IBU", $row);
         $wali       = $colGet("WALI", $row);
-        $eksint     = $colGet("EKSINT", $row);
-        $kontakwali = $colGet("KONTAKWALI", $row);
         $wisma      = $colGet("WISMA", $row);
         $waliNama   = $wali !== "" ? $wali : ($ayah !== "" ? $ayah : $ibu);
 
@@ -1450,8 +1448,6 @@ function importSiswa(array $req): array
                         CODE04            = :CODE04,
                         DESC05            = :DESC05,
                         GENUS             = :GENUS,
-                        EksternalInternal = :EksternalInternal,
-                        GENUSContact      = :GENUSContact,
                         GetWisma          = :GetWisma,
                         LastUpdate        = NOW()
                     WHERE TRIM(NOCUST) = :nis
@@ -1467,8 +1463,6 @@ function importSiswa(array $req): array
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
                     ":GENUS"             => $waliNama !== "" ? $waliNama : null,
-                    ":EksternalInternal" => $eksint !== "" ? $eksint : null,
-                    ":GENUSContact"      => $kontakwali !== "" ? $kontakwali : null,
                     ":GetWisma"          => $wisma !== "" ? $wisma : null,
                     ":nis"               => $nis,
                 ]);
@@ -1477,9 +1471,9 @@ function importSiswa(array $req): array
             } else {
                 $ins = $pdo->prepare("
                     INSERT INTO scctcust
-                        (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS, EksternalInternal, GENUSContact, GetWisma, LastUpdate)
+                        (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS, GetWisma, LastUpdate)
                     VALUES
-                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS, :EksternalInternal, :GENUSContact, :GetWisma, NOW())
+                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS, :GetWisma, NOW())
                 ");
 
                 $ins->execute([
@@ -1493,8 +1487,6 @@ function importSiswa(array $req): array
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
                     ":GENUS"             => $waliNama !== "" ? $waliNama : null,
-                    ":EksternalInternal" => $eksint !== "" ? $eksint : null,
-                    ":GENUSContact"      => $kontakwali !== "" ? $kontakwali : null,
                     ":GetWisma"          => $wisma !== "" ? $wisma : null,
                 ]);
 
