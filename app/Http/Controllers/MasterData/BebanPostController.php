@@ -70,6 +70,7 @@ class BebanPostController extends Controller
                 'id' => (string) ($item['id'] ?? ''),
                 'kelas' => (string) ($item['kelas'] ?? ''),
                 'unit' => (string) ($item['unit'] ?? ''),
+                'kelompok' => (string) ($item['kelompok'] ?? ''),
                 'jenjang' => (string) ($item['jenjang'] ?? ''),
             ];
         }, $api->getKelas());

@@ -51,11 +51,13 @@
                                     $kp = (string) ($kls['id'] ?? '');
                                     $nk = (string) ($kls['kelas'] ?? '');
                                     $un = (string) ($kls['unit'] ?? '');
+                                    $kl = (string) ($kls['kelompok'] ?? '');
                                     $jg = (string) ($kls['jenjang'] ?? '');
+                                    $parts = array_values(array_filter([$un, $nk, $kl, $jg], static fn ($v) => $v !== ''));
                                 @endphp
                                 @if ($kp !== '')
                                     <option value="{{ $kp }}" {{ old('kode_prod') === $kp ? 'selected' : '' }}>
-                                        {{ ($un !== '' ? $un.' - ' : '') . $nk . ($jg !== '' ? ' - '.$jg : '') }}
+                                        {{ implode(' - ', $parts) }}
                                     </option>
                                 @endif
                             @endforeach
