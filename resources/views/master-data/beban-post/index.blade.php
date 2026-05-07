@@ -11,6 +11,66 @@
         .bp-filter-grid { display:grid; grid-template-columns:repeat(2,minmax(240px,1fr)); gap:12px; }
         .bp-field label { display:block; font-size:12px; color:#4b5563; margin-bottom:5px; font-weight:600; }
         .bp-input { width:100%; height:36px; border:1px solid #d1d5db; border-radius:8px; padding:0 10px; font-size:13px; }
+        .bp-search-select { position: relative; }
+        .bp-search-toggle {
+            width: 100%;
+            height: 36px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 0 10px;
+            background: #fff;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .bp-search-select.open .bp-search-toggle,
+        .bp-search-toggle:focus { border-color: #4f6ef7; outline: none; }
+        .bp-search-label.placeholder { color: #9ca3af; }
+        .bp-search-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 20;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+            padding: 8px;
+            display: none;
+        }
+        .bp-search-select.open .bp-search-panel { display: block; }
+        .bp-search-input {
+            width: 100%;
+            height: 32px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 0 10px;
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+        .bp-search-list {
+            max-height: 180px;
+            overflow-y: auto;
+            border: 1px solid #eef2f7;
+            border-radius: 6px;
+            padding: 4px;
+        }
+        .bp-search-item {
+            width: 100%;
+            border: 0;
+            background: #fff;
+            text-align: left;
+            padding: 7px 9px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .bp-search-item:hover,
+        .bp-search-item.active { background: #eef4ff; color: #1d4ed8; }
+        .bp-search-empty { padding: 8px 10px; color: #6b7280; font-size: 12px; }
         .bp-filter-actions { margin-top:12px; display:flex; justify-content:flex-end; gap:8px; }
         .bp-btn { height:36px; padding:0 14px; border-radius:8px; border:1px solid #d1d5db; background:#fff; font-size:13px; font-weight:600; color:#374151; text-decoration:none; display:inline-flex; align-items:center; }
         .bp-btn-primary { background:#4f6ef7; border-color:#4f6ef7; color:#fff; cursor:pointer; }
@@ -72,22 +132,33 @@
                     </div>
                     <div class="bp-field">
                         <label>Kelas</label>
-                        <select name="kode_prod" class="bp-input">
-                            <option value="">Semua</option>
-                            @foreach (($filterOptions['kelas'] ?? []) as $kls)
-                                @php
-                                    $kp = (string) ($kls['id'] ?? $kls['kode_prod'] ?? '');
-                                    $nk = (string) ($kls['kelas'] ?? $kls['nama_kelas'] ?? '');
-                                    $un = (string) ($kls['unit'] ?? '');
-                                    $kl = (string) ($kls['kelompok'] ?? '');
-                                    $jg = (string) ($kls['jenjang'] ?? '');
-                                    $parts = array_values(array_filter([$un, $nk, $kl, $jg], static fn ($v) => $v !== ''));
-                                @endphp
-                                @if ($kp !== '')
-                                    <option value="{{ $kp }}" {{ ($kodeProd ?? '') === $kp ? 'selected' : '' }}>{{ implode(' - ', $parts) }}</option>
-                                @endif
-                            @endforeach
-                        </select>
+                        <div class="bp-search-select" id="kode-prod-search-select">
+                            <input type="hidden" name="kode_prod" id="kode-prod-search-value" value="{{ $kodeProd ?? '' }}">
+                            <button type="button" class="bp-search-toggle" id="kode-prod-search-toggle">
+                                <span class="bp-search-label placeholder" id="kode-prod-search-label">Semua</span>
+                                <span>▾</span>
+                            </button>
+                            <div class="bp-search-panel" id="kode-prod-search-panel">
+                                <input type="text" class="bp-search-input" id="kode-prod-search-input" placeholder="Cari kelas...">
+                                <div class="bp-search-list" id="kode-prod-search-list">
+                                    <button type="button" class="bp-search-item" data-value="" data-label="Semua">Semua</button>
+                                    @foreach (($filterOptions['kelas'] ?? []) as $kls)
+                                        @php
+                                            $kp = (string) ($kls['id'] ?? $kls['kode_prod'] ?? '');
+                                            $nk = (string) ($kls['kelas'] ?? $kls['nama_kelas'] ?? '');
+                                            $un = (string) ($kls['unit'] ?? '');
+                                            $kl = (string) ($kls['kelompok'] ?? '');
+                                            $jg = (string) ($kls['jenjang'] ?? '');
+                                            $parts = array_values(array_filter([$un, $nk, $kl, $jg], static fn ($v) => $v !== ''));
+                                            $label = implode(' - ', $parts);
+                                        @endphp
+                                        @if ($kp !== '' && $label !== '')
+                                            <button type="button" class="bp-search-item" data-value="{{ $kp }}" data-label="{{ $label }}">{{ $label }}</button>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="bp-field">
                         <label>Kode Akun</label>
@@ -185,5 +256,80 @@
             </div>
         @endif
     </div>
+    <script>
+        (function () {
+            var wrap = document.getElementById('kode-prod-search-select');
+            var toggle = document.getElementById('kode-prod-search-toggle');
+            var input = document.getElementById('kode-prod-search-input');
+            var list = document.getElementById('kode-prod-search-list');
+            var hidden = document.getElementById('kode-prod-search-value');
+            var label = document.getElementById('kode-prod-search-label');
+            if (!wrap || !toggle || !input || !list || !hidden || !label) return;
+
+            var items = Array.from(list.querySelectorAll('.bp-search-item'));
+            var emptyNode = document.createElement('div');
+            emptyNode.className = 'bp-search-empty';
+            emptyNode.textContent = 'Kelas tidak ditemukan';
+
+            var setSelected = function (val) {
+                hidden.value = val;
+                var active = null;
+                items.forEach(function (item) {
+                    var yes = item.getAttribute('data-value') === val;
+                    item.classList.toggle('active', yes);
+                    if (yes) active = item;
+                });
+                if (active) {
+                    label.textContent = active.getAttribute('data-label') || 'Semua';
+                    label.classList.toggle('placeholder', val === '');
+                } else {
+                    label.textContent = 'Semua';
+                    label.classList.add('placeholder');
+                }
+            };
+
+            var filterItems = function () {
+                var q = (input.value || '').trim().toLowerCase();
+                var shown = 0;
+                items.forEach(function (item) {
+                    var text = (item.getAttribute('data-label') || '').toLowerCase();
+                    var ok = q === '' || text.indexOf(q) !== -1;
+                    item.style.display = ok ? '' : 'none';
+                    if (ok) shown++;
+                });
+                if (shown === 0) {
+                    if (!list.contains(emptyNode)) list.appendChild(emptyNode);
+                } else if (list.contains(emptyNode)) {
+                    list.removeChild(emptyNode);
+                }
+            };
+
+            var closePanel = function () {
+                wrap.classList.remove('open');
+                input.value = '';
+                filterItems();
+            };
+
+            toggle.addEventListener('click', function () {
+                wrap.classList.toggle('open');
+                if (wrap.classList.contains('open')) {
+                    filterItems();
+                    setTimeout(function () { input.focus(); }, 0);
+                }
+            });
+            input.addEventListener('input', filterItems);
+            items.forEach(function (item) {
+                item.addEventListener('click', function () {
+                    setSelected(item.getAttribute('data-value') || '');
+                    closePanel();
+                });
+            });
+            document.addEventListener('click', function (e) {
+                if (!wrap.contains(e.target)) closePanel();
+            });
+
+            setSelected(hidden.value || '');
+        })();
+    </script>
 @endsection
 

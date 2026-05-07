@@ -612,8 +612,27 @@ class AmalFatimahApiService
                 return ['thn_masuk' => [], 'kelas' => [], 'akun' => []];
             }
 
+            $tahunRaw = [];
+            if (is_array($inner['thn_masuk'] ?? null)) {
+                $tahunRaw = array_values($inner['thn_masuk']);
+            } elseif (is_array($inner['thn_aka'] ?? null)) {
+                $tahunRaw = array_values($inner['thn_aka']);
+            }
+
+            $tahun = [];
+            foreach ($tahunRaw as $row) {
+                if (is_array($row)) {
+                    $val = trim((string) ($row['thn_masuk'] ?? $row['THN_MASUK'] ?? $row['thn_aka'] ?? $row['THN_AKA'] ?? ''));
+                } else {
+                    $val = trim((string) $row);
+                }
+                if ($val !== '') {
+                    $tahun[] = ['thn_masuk' => $val];
+                }
+            }
+
             return [
-                'thn_masuk' => is_array($inner['thn_masuk'] ?? null) ? array_values($inner['thn_masuk']) : [],
+                'thn_masuk' => $tahun,
                 'kelas' => is_array($inner['kelas'] ?? null) ? array_values($inner['kelas']) : [],
                 'akun' => is_array($inner['akun'] ?? null) ? array_values($inner['akun']) : [],
             ];

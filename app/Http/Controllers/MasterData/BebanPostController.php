@@ -63,7 +63,10 @@ class BebanPostController extends Controller
 
     public function create(AmalFatimahApiService $api): View
     {
-        $thnAkaOptions = $api->getThnAka();
+        $filterOptions = $api->getFilterBebanPost();
+        $thnAkaOptions = is_array($filterOptions['thn_masuk'] ?? null)
+            ? $filterOptions['thn_masuk']
+            : $api->getThnAka();
         $kelasOptions = array_map(static function ($row) {
             $item = is_array($row) ? array_change_key_case($row, CASE_LOWER) : [];
             return [
