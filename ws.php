@@ -323,20 +323,47 @@ function getKelasByid(array $req): array
 function createKelas(array $req): array
 {
     $kelas    = trim((string) ($req["kelas"] ?? ""));
-    $jenjang  = trim((string) ($req["jenjang"] ?? ""));
     $unit     = trim((string) ($req["unit"] ?? ""));
-    $kelompok = trim((string) ($req["kelompok"] ?? ""));
+    $jenjang  = $kelas;
+    $kelompokReq = trim((string) ($req["kelompok"] ?? ""));
 
-    if ($kelas === "" || $jenjang === "" || $unit === "" || $kelompok === "") {
+    if ($kelas === "" || $unit === "") {
         http_response_code(422);
         echo json_encode([
             "status" => 422,
-            "message" => "Field kelas, jenjang, unit, kelompok wajib diisi"
+            "message" => "Field kelas dan unit wajib diisi"
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $pdo = dbConnectPdo();
+
+    // Mapping kelompok dari master sekolah: kelompok = CODE01, unit = DESC01.
+    // Jika frontend mengirim kode unit langsung, tetap didukung.
+    $stmtSekolah = $pdo->prepare("
+        SELECT TRIM(CODE01) AS CODE01
+        FROM mst_sekolah
+        WHERE
+            (DESC01 IS NOT NULL AND TRIM(DESC01) = :unit)
+            OR (CODE01 IS NOT NULL AND TRIM(CODE01) = :unit)
+            OR (:kelompok_req != '' AND CODE01 IS NOT NULL AND TRIM(CODE01) = :kelompok_req)
+        LIMIT 1
+    ");
+    $stmtSekolah->execute([
+        ":unit" => $unit,
+        ":kelompok_req" => $kelompokReq,
+    ]);
+    $sekolahRow = $stmtSekolah->fetch();
+    $kelompok = trim((string) ($sekolahRow["CODE01"] ?? ""));
+
+    if ($kelompok === "") {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "Unit tidak ditemukan di mst_sekolah (CODE01)"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     $check = $pdo->prepare("SELECT id FROM mst_kelas WHERE kelas = :kelas AND unit = :unit");
     $check->execute([":kelas" => $kelas, ":unit" => $unit]);
@@ -1428,7 +1455,6 @@ function importSiswa(array $req): array
         $ayah       = $colGet("AYAH", $row);
         $ibu        = $colGet("IBU", $row);
         $wali       = $colGet("WALI", $row);
-        $wisma      = $colGet("WISMA", $row);
         $waliNama   = $wali !== "" ? $wali : ($ayah !== "" ? $ayah : $ibu);
 
         try {
@@ -1448,8 +1474,6 @@ function importSiswa(array $req): array
                         CODE04            = :CODE04,
                         DESC05            = :DESC05,
                         GENUS             = :GENUS,
-                        GetWisma          = :GetWisma,
-                        LastUpdate        = NOW()
                     WHERE TRIM(NOCUST) = :nis
                 ");
 
@@ -1463,7 +1487,6 @@ function importSiswa(array $req): array
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
                     ":GENUS"             => $waliNama !== "" ? $waliNama : null,
-                    ":GetWisma"          => $wisma !== "" ? $wisma : null,
                     ":nis"               => $nis,
                 ]);
 
@@ -1471,9 +1494,9 @@ function importSiswa(array $req): array
             } else {
                 $ins = $pdo->prepare("
                     INSERT INTO scctcust
-                        (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS, GetWisma, LastUpdate)
+                        (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS)
                     VALUES
-                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS, :GetWisma, NOW())
+                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS)
                 ");
 
                 $ins->execute([
@@ -1487,7 +1510,6 @@ function importSiswa(array $req): array
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
                     ":GENUS"             => $waliNama !== "" ? $waliNama : null,
-                    ":GetWisma"          => $wisma !== "" ? $wisma : null,
                 ]);
 
                 $inserted++;
