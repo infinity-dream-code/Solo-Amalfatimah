@@ -26,7 +26,6 @@
             <a href="{{ route('master.beban_post') }}" class="{{ request()->routeIs('master.beban_post*') ? 'active' : '' }}">Beban Post</a>
             <a href="{{ route('master.export_import') }}" class="{{ request()->routeIs('master.export_import*') ? 'active' : '' }}">Export Import Data</a>
             <a href="{{ route('master.data_siswa') }}" class="{{ request()->routeIs('master.data_siswa*') ? 'active' : '' }}">Data Siswa</a>
-            <a href="{{ route('master.setting_atribut_siswa') }}" class="{{ request()->routeIs('master.setting_atribut_siswa*') ? 'active' : '' }}">Setting Atribut Siswa</a>
             <a href="{{ route('master.pindah_kelas') }}" class="{{ request()->routeIs('master.pindah_kelas*') ? 'active' : '' }}">Pindah Kelas</a>
         </div>
 

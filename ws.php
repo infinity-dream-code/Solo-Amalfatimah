@@ -472,7 +472,7 @@ function getSekolah(array $req): array
         $sql .= " WHERE " . implode(" AND ", $where);
     }
 
-    $sql .= " ORDER BY DESC01 ASC";
+    $sql .= " ORDER BY CAST(TRIM(CODE01) AS UNSIGNED) DESC, TRIM(CODE01) DESC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -1775,7 +1775,7 @@ function importSiswa(array $req): array
                         DESC04            = :DESC04,
                         CODE04            = :CODE04,
                         DESC05            = :DESC05,
-                        GENUS             = :GENUS,
+                        GENUS             = :GENUS
                     WHERE TRIM(NOCUST) = :nis
                 ");
 
@@ -2135,8 +2135,7 @@ function pindahKelas(array $req): array
             UPDATE scctcust SET
                 DESC02     = :DESC02,
                 CODE03     = :CODE03,
-                DESC03     = :DESC03,
-                LastUpdate = NOW()
+                DESC03     = :DESC03
             WHERE TRIM(CODE03) = :CODE03_lama
         ");
         $stmt->execute([
@@ -2169,8 +2168,7 @@ function pindahKelas(array $req): array
         UPDATE scctcust SET
             DESC02     = ?,
             CODE03     = ?,
-            DESC03     = ?,
-            LastUpdate = NOW()
+            DESC03     = ?
         WHERE CUSTID IN ($placeholders)
     ");
     $stmt->execute(array_merge([$kelasTujuanNama, $idTujuan, $kelompokTujuan], $custids));

@@ -64,7 +64,7 @@
         .eid-table-wrap { overflow-x: auto; }
         .eid-table {
             width: 100%;
-            min-width: 1220px;
+            min-width: 980px;
             border-collapse: collapse;
             font-size: 13px;
         }
@@ -242,9 +242,6 @@
                             <th>KELOMPOK</th>
                             <th>ANGKATAN</th>
                             <th>JENIS KELAMIN</th>
-                            <th>AYAH</th>
-                            <th>IBU</th>
-                            <th>KONTAK WALI</th>
                             <th>ALAMAT</th>
                         </tr>
                     </thead>
@@ -260,14 +257,11 @@
                                 <td>{{ $row['kelompok'] ?? '-' }}</td>
                                 <td>{{ $row['angkatan'] ?? '-' }}</td>
                                 <td>{{ $row['gender'] ?? '-' }}</td>
-                                <td>{{ $row['ayah'] ?? '-' }}</td>
-                                <td>{{ $row['ibu'] ?? '-' }}</td>
-                                <td>{{ $row['kontak_wali'] ?? '-' }}</td>
                                 <td>{{ $row['alamat'] ?? '-' }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="13" class="eid-empty">Tidak ada data yang tersedia pada tabel ini</td>
+                                <td colspan="10" class="eid-empty">Tidak ada data yang tersedia pada tabel ini</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -397,9 +391,6 @@
                                 kelompok: String(r.KELOMPOK || '').trim(),
                                 angkatan: String(r.ANGKATAN || '').trim(),
                                 gender: String(r.GENDER || '').trim(),
-                                ayah: String(r.AYAH || '').trim(),
-                                ibu: String(r.IBU || '').trim(),
-                                kontak_wali: String(r.KontakWali || r.KONTAKWALI || '').trim(),
                                 alamat: String(r.ALAMAT || '').trim()
                             };
                         });
