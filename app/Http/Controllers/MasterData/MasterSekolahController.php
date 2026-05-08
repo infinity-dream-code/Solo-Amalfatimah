@@ -21,13 +21,9 @@ class MasterSekolahController extends Controller
             $rows = array_values(array_filter($rows, static function ($row) use ($keywordLower) {
                 $code01 = mb_strtolower((string) ($row['code01'] ?? ''));
                 $desc01 = mb_strtolower((string) ($row['desc01'] ?? ''));
-                $code02 = mb_strtolower((string) ($row['code02'] ?? ''));
-                $desc02 = mb_strtolower((string) ($row['desc02'] ?? ''));
 
                 return str_contains($code01, $keywordLower)
-                    || str_contains($desc01, $keywordLower)
-                    || str_contains($code02, $keywordLower)
-                    || str_contains($desc02, $keywordLower);
+                    || str_contains($desc01, $keywordLower);
             }));
         }
 
@@ -67,14 +63,16 @@ class MasterSekolahController extends Controller
         $validated = $request->validate([
             'code01' => ['required', 'string', 'max:50'],
             'desc01' => ['required', 'string', 'max:150'],
-            'code02' => ['nullable', 'string', 'max:50'],
-            'desc02' => ['nullable', 'string', 'max:150'],
         ], [
-            'code01.required' => 'CODE01 wajib diisi.',
-            'desc01.required' => 'DESC01 wajib diisi.',
+            'code01.required' => 'Code wajib diisi.',
+            'desc01.required' => 'Unit wajib diisi.',
         ]);
 
-        $result = $api->createSekolah($validated);
+        $result = $api->createSekolah([
+            ...$validated,
+            'code02' => '',
+            'desc02' => '',
+        ]);
         if (!($result['ok'] ?? false)) {
             return back()
                 ->withInput()
@@ -112,16 +110,16 @@ class MasterSekolahController extends Controller
         $validated = $request->validate([
             'code01' => ['required', 'string', 'max:50'],
             'desc01' => ['required', 'string', 'max:150'],
-            'code02' => ['nullable', 'string', 'max:50'],
-            'desc02' => ['nullable', 'string', 'max:150'],
         ], [
-            'code01.required' => 'CODE01 wajib diisi.',
-            'desc01.required' => 'DESC01 wajib diisi.',
+            'code01.required' => 'Code wajib diisi.',
+            'desc01.required' => 'Unit wajib diisi.',
         ]);
 
         $result = $api->updateSekolah([
             'id' => $sekolahId,
             ...$validated,
+            'code02' => '',
+            'desc02' => '',
         ]);
 
         if (!($result['ok'] ?? false)) {

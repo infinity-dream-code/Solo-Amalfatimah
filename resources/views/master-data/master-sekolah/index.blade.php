@@ -12,7 +12,7 @@
         .ms-search input { width: 220px; height: 34px; border: 1px solid #e5e7eb; border-radius: 7px; padding: 0 10px; outline: none; font-size: 12px; }
         .ms-search input:focus { border-color: #4f6ef7; }
         .ms-table-wrap { overflow-x: auto; border-top: 1px solid #eef2f7; }
-        .ms-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+        .ms-table { width: 100%; border-collapse: collapse; min-width: 620px; }
         .ms-table th, .ms-table td { border-bottom: 1px solid #eef2f7; padding: 10px 12px; font-size: 13px; text-align: left; vertical-align: middle; }
         .ms-table th { color: #4b5563; font-weight: 700; background: #fafbfd; }
         .ms-col-no { width: 56px; text-align: center; }
@@ -50,10 +50,8 @@
                 <thead>
                     <tr>
                         <th class="ms-col-no">No</th>
-                        <th>CODE01</th>
-                        <th>DESC01</th>
-                        <th>CODE02</th>
-                        <th>DESC02</th>
+                        <th>Code</th>
+                        <th>Unit</th>
                         <th class="ms-col-action">Aksi</th>
                     </tr>
                 </thead>
@@ -63,8 +61,6 @@
                             <td class="ms-col-no">{{ ($sekolahRows->firstItem() ?? 1) + $index }}</td>
                             <td>{{ $row['code01'] ?? '-' }}</td>
                             <td>{{ $row['desc01'] ?? '-' }}</td>
-                            <td>{{ $row['code02'] ?? '-' }}</td>
-                            <td>{{ $row['desc02'] ?? '-' }}</td>
                             <td class="ms-col-action">
                                 <a class="ms-btn-edit" href="{{ route('master.sekolah.edit', ['id' => $row['id'] ?? 0]) }}">Edit</a>
                                 <form method="POST" action="{{ route('master.sekolah.destroy', ['id' => $row['id'] ?? 0]) }}" style="display:inline;" onsubmit="return confirm('Yakin hapus data sekolah ini?');">
@@ -76,7 +72,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="ms-empty">Data sekolah tidak ditemukan.</td>
+                            <td colspan="4" class="ms-empty">Data sekolah tidak ditemukan.</td>
                         </tr>
                     @endforelse
                 </tbody>
