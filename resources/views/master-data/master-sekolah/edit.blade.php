@@ -19,8 +19,8 @@
                 @method('PUT')
                 <div style="display:grid;gap:10px;max-width:620px;">
                     <div>
-                        <div style="font-weight:700;margin-bottom:6px;">Code *</div>
-                        <input name="code01" type="text" value="{{ old('code01', $row['code01'] ?? '') }}" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+                        <div style="font-weight:700;margin-bottom:6px;">Code</div>
+                        <input type="text" value="{{ $row['code01'] ?? '-' }}" disabled style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
                     </div>
                     <div>
                         <div style="font-weight:700;margin-bottom:6px;">Unit *</div>

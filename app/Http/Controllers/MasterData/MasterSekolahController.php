@@ -61,10 +61,8 @@ class MasterSekolahController extends Controller
     public function store(Request $request, AmalFatimahApiService $api): RedirectResponse
     {
         $validated = $request->validate([
-            'code01' => ['required', 'string', 'max:50'],
             'desc01' => ['required', 'string', 'max:150'],
         ], [
-            'code01.required' => 'Code wajib diisi.',
             'desc01.required' => 'Unit wajib diisi.',
         ]);
 
@@ -107,16 +105,20 @@ class MasterSekolahController extends Controller
             return redirect()->route('master.sekolah')->with('status', 'ID sekolah tidak valid.');
         }
 
+        $existing = $api->getSekolahById($sekolahId);
+        if ($existing === []) {
+            return redirect()->route('master.sekolah')->with('status', 'Data sekolah tidak ditemukan.');
+        }
+
         $validated = $request->validate([
-            'code01' => ['required', 'string', 'max:50'],
             'desc01' => ['required', 'string', 'max:150'],
         ], [
-            'code01.required' => 'Code wajib diisi.',
             'desc01.required' => 'Unit wajib diisi.',
         ]);
 
         $result = $api->updateSekolah([
             'id' => $sekolahId,
+            'code01' => (string) ($existing['code01'] ?? ''),
             ...$validated,
             'code02' => '',
             'desc02' => '',

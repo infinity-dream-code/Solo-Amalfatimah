@@ -526,16 +526,34 @@ function createSekolah(array $req): array
     $code02 = trim((string) ($req["CODE02"] ?? ""));
     $desc02 = trim((string) ($req["DESC02"] ?? ""));
 
-    if ($code01 === "" || $desc01 === "") {
+    if ($desc01 === "") {
         http_response_code(422);
         echo json_encode([
             "status" => 422,
-            "message" => "Field CODE01 dan DESC01 wajib diisi"
+            "message" => "Field DESC01 wajib diisi"
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $pdo = dbConnectPdo();
+
+    // CODE01 otomatis jika tidak dikirim oleh frontend.
+    if ($code01 === "") {
+        $stmtNext = $pdo->prepare("
+            SELECT
+                COALESCE(MAX(CAST(TRIM(CODE01) AS UNSIGNED)), 0) AS max_code,
+                COALESCE(MAX(CHAR_LENGTH(TRIM(CODE01))), 3) AS max_len
+            FROM mst_sekolah
+            WHERE CODE01 IS NOT NULL
+              AND TRIM(CODE01) REGEXP '^[0-9]+$'
+        ");
+        $stmtNext->execute();
+        $nextRow = $stmtNext->fetch();
+
+        $nextCode = (int) ($nextRow["max_code"] ?? 0) + 1;
+        $codeLen = max(3, (int) ($nextRow["max_len"] ?? 3));
+        $code01 = str_pad((string) $nextCode, $codeLen, "0", STR_PAD_LEFT);
+    }
 
     $check = $pdo->prepare("
         SELECT id
