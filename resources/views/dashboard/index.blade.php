@@ -449,6 +449,7 @@
             </button>
             <div class="sidebar-subnav {{ request()->routeIs('master.*') ? 'open' : '' }}" id="mdSubnav">
                 <a href="{{ route('master.kelas') }}" class="{{ request()->routeIs('master.kelas') ? 'active' : '' }}">Master Kelas</a>
+                <a href="{{ route('master.sekolah') }}" class="{{ request()->routeIs('master.sekolah') ? 'active' : '' }}">Master Sekolah</a>
                 <a href="{{ route('master.tahun_pelajaran') }}" class="{{ request()->routeIs('master.tahun_pelajaran') ? 'active' : '' }}">Tahun Pelajaran</a>
                 <a href="{{ route('master.post') }}" class="{{ request()->routeIs('master.post') ? 'active' : '' }}">Master Post</a>
                 <a href="{{ route('master.beban_post') }}" class="{{ request()->routeIs('master.beban_post') ? 'active' : '' }}">Beban Post</a>

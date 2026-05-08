@@ -322,16 +322,19 @@ function getKelasByid(array $req): array
 
 function createKelas(array $req): array
 {
-    $kelas    = trim((string) ($req["kelas"] ?? ""));
-    $unit     = trim((string) ($req["unit"] ?? ""));
-    $jenjang  = $kelas;
+    // Sesuai kebutuhan bisnis:
+    // - kolom mst_kelas.kelas   <- input kelompok
+    // - kolom mst_kelas.jenjang <- input kelas
+    $jenjang = trim((string) ($req["kelas"] ?? ""));
+    $kelas = trim((string) ($req["kelompok"] ?? ""));
+    $unit = trim((string) ($req["unit"] ?? ""));
     $kelompokReq = trim((string) ($req["kelompok"] ?? ""));
 
-    if ($kelas === "" || $unit === "") {
+    if ($jenjang === "" || $kelas === "" || $unit === "") {
         http_response_code(422);
         echo json_encode([
             "status" => 422,
-            "message" => "Field kelas dan unit wajib diisi"
+            "message" => "Field kelas, kelompok, dan unit wajib diisi"
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -344,14 +347,15 @@ function createKelas(array $req): array
         SELECT TRIM(CODE01) AS CODE01
         FROM mst_sekolah
         WHERE
-            (DESC01 IS NOT NULL AND TRIM(DESC01) = :unit)
-            OR (CODE01 IS NOT NULL AND TRIM(CODE01) = :unit)
-            OR (:kelompok_req != '' AND CODE01 IS NOT NULL AND TRIM(CODE01) = :kelompok_req)
+            (DESC01 IS NOT NULL AND TRIM(DESC01) = :unit_desc)
+            OR (CODE01 IS NOT NULL AND TRIM(CODE01) = :unit_code)
+            OR (CODE01 IS NOT NULL AND TRIM(CODE01) = :kelompok_req_code)
         LIMIT 1
     ");
     $stmtSekolah->execute([
-        ":unit" => $unit,
-        ":kelompok_req" => $kelompokReq,
+        ":unit_desc" => $unit,
+        ":unit_code" => $unit,
+        ":kelompok_req_code" => $kelompokReq,
     ]);
     $sekolahRow = $stmtSekolah->fetch();
     $kelompok = trim((string) ($sekolahRow["CODE01"] ?? ""));
@@ -434,6 +438,286 @@ function deleteKelas(array $req): array
     return [
         "id"    => $id,
         "kelas" => $row["kelas"],
+    ];
+}
+
+function getSekolah(array $req): array
+{
+    $pdo = dbConnectPdo();
+
+    $where = [];
+    $params = [];
+
+    if (!empty($req["CODE01"])) {
+        $where[] = "TRIM(CODE01) = :CODE01";
+        $params[":CODE01"] = trim((string) $req["CODE01"]);
+    }
+
+    if (!empty($req["DESC01"])) {
+        $where[] = "TRIM(DESC01) LIKE :DESC01";
+        $params[":DESC01"] = "%" . trim((string) $req["DESC01"]) . "%";
+    }
+
+    $sql = "
+        SELECT
+            id,
+            TRIM(CODE01) AS CODE01,
+            TRIM(DESC01) AS DESC01,
+            TRIM(CODE02) AS CODE02,
+            TRIM(DESC02) AS DESC02
+        FROM mst_sekolah
+    ";
+
+    if (!empty($where)) {
+        $sql .= " WHERE " . implode(" AND ", $where);
+    }
+
+    $sql .= " ORDER BY DESC01 ASC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    return $stmt->fetchAll();
+}
+
+function getSekolahByid(array $req): array
+{
+    $id = (int) ($req["id"] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "ID tidak valid"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $pdo = dbConnectPdo();
+    $stmt = $pdo->prepare("
+        SELECT
+            id,
+            TRIM(CODE01) AS CODE01,
+            TRIM(DESC01) AS DESC01,
+            TRIM(CODE02) AS CODE02,
+            TRIM(DESC02) AS DESC02
+        FROM mst_sekolah
+        WHERE id = :id
+    ");
+    $stmt->execute([":id" => $id]);
+    $row = $stmt->fetch();
+
+    if (!$row) {
+        http_response_code(404);
+        echo json_encode([
+            "status" => 404,
+            "message" => "Data sekolah tidak ditemukan"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    return $row;
+}
+
+function createSekolah(array $req): array
+{
+    $code01 = trim((string) ($req["CODE01"] ?? ""));
+    $desc01 = trim((string) ($req["DESC01"] ?? ""));
+    $code02 = trim((string) ($req["CODE02"] ?? ""));
+    $desc02 = trim((string) ($req["DESC02"] ?? ""));
+
+    if ($code01 === "" || $desc01 === "") {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "Field CODE01 dan DESC01 wajib diisi"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $pdo = dbConnectPdo();
+
+    $check = $pdo->prepare("
+        SELECT id
+        FROM mst_sekolah
+        WHERE TRIM(CODE01) = :CODE01 OR TRIM(DESC01) = :DESC01
+        LIMIT 1
+    ");
+    $check->execute([
+        ":CODE01" => $code01,
+        ":DESC01" => $desc01,
+    ]);
+
+    if ($check->fetch()) {
+        http_response_code(409);
+        echo json_encode([
+            "status" => 409,
+            "message" => "Master sekolah sudah ada"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO mst_sekolah (CODE01, DESC01, CODE02, DESC02)
+        VALUES (:CODE01, :DESC01, :CODE02, :DESC02)
+    ");
+    $stmt->execute([
+        ":CODE01" => $code01,
+        ":DESC01" => $desc01,
+        ":CODE02" => $code02 !== "" ? $code02 : null,
+        ":DESC02" => $desc02 !== "" ? $desc02 : null,
+    ]);
+
+    $newId = (int) $pdo->lastInsertId();
+
+    return [
+        "id" => $newId,
+        "CODE01" => $code01,
+        "DESC01" => $desc01,
+        "CODE02" => $code02,
+        "DESC02" => $desc02,
+    ];
+}
+
+function updateSekolah(array $req): array
+{
+    $id = (int) ($req["id"] ?? 0);
+    $code01 = trim((string) ($req["CODE01"] ?? ""));
+    $desc01 = trim((string) ($req["DESC01"] ?? ""));
+    $code02 = trim((string) ($req["CODE02"] ?? ""));
+    $desc02 = trim((string) ($req["DESC02"] ?? ""));
+
+    if ($id <= 0) {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "ID tidak valid"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($code01 === "" || $desc01 === "") {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "Field CODE01 dan DESC01 wajib diisi"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $pdo = dbConnectPdo();
+
+    $exist = $pdo->prepare("SELECT id FROM mst_sekolah WHERE id = :id");
+    $exist->execute([":id" => $id]);
+    if (!$exist->fetch()) {
+        http_response_code(404);
+        echo json_encode([
+            "status" => 404,
+            "message" => "Data sekolah tidak ditemukan"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $check = $pdo->prepare("
+        SELECT id
+        FROM mst_sekolah
+        WHERE id <> :id AND (TRIM(CODE01) = :CODE01 OR TRIM(DESC01) = :DESC01)
+        LIMIT 1
+    ");
+    $check->execute([
+        ":id" => $id,
+        ":CODE01" => $code01,
+        ":DESC01" => $desc01,
+    ]);
+    if ($check->fetch()) {
+        http_response_code(409);
+        echo json_encode([
+            "status" => 409,
+            "message" => "CODE01 atau DESC01 sudah digunakan"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        UPDATE mst_sekolah
+        SET CODE01 = :CODE01, DESC01 = :DESC01, CODE02 = :CODE02, DESC02 = :DESC02
+        WHERE id = :id
+    ");
+    $stmt->execute([
+        ":id" => $id,
+        ":CODE01" => $code01,
+        ":DESC01" => $desc01,
+        ":CODE02" => $code02 !== "" ? $code02 : null,
+        ":DESC02" => $desc02 !== "" ? $desc02 : null,
+    ]);
+
+    return [
+        "id" => $id,
+        "CODE01" => $code01,
+        "DESC01" => $desc01,
+        "CODE02" => $code02,
+        "DESC02" => $desc02,
+    ];
+}
+
+function deleteSekolah(array $req): array
+{
+    $id = (int) ($req["id"] ?? 0);
+
+    if ($id <= 0) {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "ID tidak valid"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $pdo = dbConnectPdo();
+
+    $exist = $pdo->prepare("
+        SELECT id, TRIM(CODE01) AS CODE01, TRIM(DESC01) AS DESC01
+        FROM mst_sekolah
+        WHERE id = :id
+    ");
+    $exist->execute([":id" => $id]);
+    $row = $exist->fetch();
+
+    if (!$row) {
+        http_response_code(404);
+        echo json_encode([
+            "status" => 404,
+            "message" => "Data sekolah tidak ditemukan"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $checkKelas = $pdo->prepare("
+        SELECT id
+        FROM mst_kelas
+        WHERE TRIM(unit) = :unit OR TRIM(kelompok) = :kelompok
+        LIMIT 1
+    ");
+    $checkKelas->execute([
+        ":unit" => (string) $row["DESC01"],
+        ":kelompok" => (string) $row["CODE01"],
+    ]);
+    if ($checkKelas->fetch()) {
+        http_response_code(409);
+        echo json_encode([
+            "status" => 409,
+            "message" => "Data sekolah masih dipakai di master kelas"
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("DELETE FROM mst_sekolah WHERE id = :id");
+    $stmt->execute([":id" => $id]);
+
+    return [
+        "id" => $id,
+        "CODE01" => $row["CODE01"],
+        "DESC01" => $row["DESC01"],
     ];
 }
 
@@ -5894,6 +6178,69 @@ try {
             "status"  => 200,
             "method"  => "deleteKelas",
             "message" => "Kelas berhasil dihapus",
+            "data"    => $row
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "getSekolah") {
+        $rows = getSekolah($req);
+
+        http_response_code(200);
+        echo json_encode([
+            "status" => 200,
+            "method" => "getSekolah",
+            "data"   => $rows
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "getSekolahByid") {
+        $row = getSekolahByid($req);
+
+        http_response_code(200);
+        echo json_encode([
+            "status" => 200,
+            "method" => "getSekolahByid",
+            "data"   => $row
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "createSekolah") {
+        $row = createSekolah($req);
+
+        http_response_code(201);
+        echo json_encode([
+            "status"  => 201,
+            "method"  => "createSekolah",
+            "message" => "Sekolah berhasil ditambahkan",
+            "data"    => $row
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "updateSekolah") {
+        $row = updateSekolah($req);
+
+        http_response_code(200);
+        echo json_encode([
+            "status"  => 200,
+            "method"  => "updateSekolah",
+            "message" => "Sekolah berhasil diupdate",
+            "data"    => $row
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "deleteSekolah") {
+        $row = deleteSekolah($req);
+
+        http_response_code(200);
+        echo json_encode([
+            "status"  => 200,
+            "method"  => "deleteSekolah",
+            "message" => "Sekolah berhasil dihapus",
             "data"    => $row
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;

@@ -6,6 +6,7 @@ use App\Http\Controllers\MasterData\BebanPostController;
 use App\Http\Controllers\MasterData\DataSiswaController;
 use App\Http\Controllers\MasterData\ExportImportDataController;
 use App\Http\Controllers\MasterData\MasterKelasController;
+use App\Http\Controllers\MasterData\MasterSekolahController;
 use App\Http\Controllers\MasterData\MasterPostController;
 use App\Http\Controllers\MasterData\PindahKelasController;
 use App\Http\Controllers\MasterData\SettingAtributSiswaController;
@@ -52,6 +53,14 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::get('/kelas/{id}/edit', [MasterKelasController::class, 'edit'])->name('kelas.edit');
         Route::put('/kelas/{id}', [MasterKelasController::class, 'update'])->name('kelas.update');
         Route::delete('/kelas/{id}', [MasterKelasController::class, 'destroy'])->name('kelas.destroy');
+
+        // Master Sekolah
+        Route::get('/sekolah', [MasterSekolahController::class, 'index'])->name('sekolah');
+        Route::get('/sekolah/create', [MasterSekolahController::class, 'create'])->name('sekolah.create');
+        Route::post('/sekolah', [MasterSekolahController::class, 'store'])->name('sekolah.store');
+        Route::get('/sekolah/{id}/edit', [MasterSekolahController::class, 'edit'])->name('sekolah.edit');
+        Route::put('/sekolah/{id}', [MasterSekolahController::class, 'update'])->name('sekolah.update');
+        Route::delete('/sekolah/{id}', [MasterSekolahController::class, 'destroy'])->name('sekolah.destroy');
 
         // Tahun Pelajaran
         Route::get('/tahun-pelajaran', [TahunPelajaranController::class, 'index'])->name('tahun_pelajaran');

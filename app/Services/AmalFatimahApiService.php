@@ -289,6 +289,201 @@ class AmalFatimahApiService
         }
     }
 
+    public function getSekolah(array $filters = []): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getSekolah', 'rnd' => uniqid()], $jwtKey);
+
+        $payload = array_filter([
+            'method' => 'getSekolah',
+            'token' => $token,
+            'CODE01' => $filters['code01'] ?? null,
+            'DESC01' => $filters['desc01'] ?? null,
+        ], static fn ($value) => !is_null($value) && $value !== '');
+
+        try {
+            $response = Http::timeout(15)->post($url, $payload);
+
+            if (!$response->successful()) {
+                Log::warning('[WS Amal Fatimah] getSekolah HTTP failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return [];
+            }
+
+            $data = $response->json();
+            $inner = $data['data'] ?? $data;
+            if (!is_array($inner)) {
+                return [];
+            }
+
+            return array_map(static function ($row) {
+                if (is_array($row)) {
+                    return array_change_key_case($row, CASE_LOWER);
+                }
+
+                return is_object($row) ? array_change_key_case((array) $row, CASE_LOWER) : [];
+            }, array_values($inner));
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getSekolah: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    public function getSekolahById(int $id): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getSekolahByid', 'rnd' => uniqid()], $jwtKey);
+
+        try {
+            $response = Http::timeout(15)->post($url, [
+                'method' => 'getSekolahByid',
+                'token' => $token,
+                'id' => $id,
+            ]);
+            $json = $response->json();
+            $inner = $json['data'] ?? [];
+
+            if (!$response->successful() || !is_array($inner)) {
+                return [];
+            }
+
+            return array_change_key_case($inner, CASE_LOWER);
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getSekolahByid: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    public function createSekolah(array $payload): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'createSekolah', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'createSekolah',
+            'token' => $token,
+            'CODE01' => trim((string) ($payload['code01'] ?? '')),
+            'DESC01' => trim((string) ($payload['desc01'] ?? '')),
+            'CODE02' => trim((string) ($payload['code02'] ?? '')),
+            'DESC02' => trim((string) ($payload['desc02'] ?? '')),
+        ];
+
+        try {
+            $response = Http::timeout(15)->post($url, $body);
+            $json = $response->json();
+
+            if ($response->successful() && (int) ($json['status'] ?? 0) === 201) {
+                return [
+                    'ok' => true,
+                    'message' => (string) ($json['message'] ?? 'Sekolah berhasil ditambahkan'),
+                    'data' => $json['data'] ?? [],
+                ];
+            }
+
+            Log::warning('[WS Amal Fatimah] createSekolah failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => (string) ($json['message'] ?? 'Gagal menambahkan data sekolah'),
+                'data' => [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] createSekolah: ' . $e->getMessage());
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi web service',
+                'data' => [],
+            ];
+        }
+    }
+
+    public function updateSekolah(array $payload): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'updateSekolah', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'updateSekolah',
+            'token' => $token,
+            'id' => (int) ($payload['id'] ?? 0),
+            'CODE01' => trim((string) ($payload['code01'] ?? '')),
+            'DESC01' => trim((string) ($payload['desc01'] ?? '')),
+            'CODE02' => trim((string) ($payload['code02'] ?? '')),
+            'DESC02' => trim((string) ($payload['desc02'] ?? '')),
+        ];
+
+        try {
+            $response = Http::timeout(15)->post($url, $body);
+            $json = $response->json();
+
+            if ($response->successful() && (int) ($json['status'] ?? 0) === 200) {
+                return [
+                    'ok' => true,
+                    'message' => (string) ($json['message'] ?? 'Sekolah berhasil diupdate'),
+                    'data' => $json['data'] ?? [],
+                ];
+            }
+
+            Log::warning('[WS Amal Fatimah] updateSekolah failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => (string) ($json['message'] ?? 'Gagal mengupdate data sekolah'),
+                'data' => [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] updateSekolah: ' . $e->getMessage());
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi web service',
+                'data' => [],
+            ];
+        }
+    }
+
+    public function deleteSekolah(int $id): bool
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'deleteSekolah', 'rnd' => uniqid()], $jwtKey);
+
+        try {
+            $response = Http::timeout(15)->post($url, [
+                'method' => 'deleteSekolah',
+                'token' => $token,
+                'id' => $id,
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('[WS Amal Fatimah] deleteSekolah HTTP failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return false;
+            }
+
+            $data = $response->json();
+            $status = (int) ($data['status'] ?? 0);
+
+            return $status === 200;
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] deleteSekolah: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function getAkun(?string $namaAkun = null): array
     {
         $url = config('services.ws_amal_fatimah.url');
