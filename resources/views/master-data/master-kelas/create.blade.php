@@ -184,7 +184,7 @@
 
     <div class="page-heading">
         <h2>Tambah Master Kelas</h2>
-        <p>Isi data Unit, Kelas, dan Kelompok.</p>
+        <p>Unit, Kelas (kolom DB: <em>jenjang</em>), Kelompok (kolom DB: <em>kelas</em>).</p>
     </div>
 
     <div class="mk-form-card">

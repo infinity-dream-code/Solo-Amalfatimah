@@ -234,8 +234,8 @@
                         <tr>
                             <td class="mk-col-no">{{ ($kelasRows->firstItem() ?? 1) + $index }}</td>
                             <td>{{ $row['unit'] ?? '-' }}</td>
-                            <td>{{ $row['kelas'] ?? '-' }}</td>
-                            <td>{{ $row['kelompok'] ?? '-' }}</td>
+                            <td>{{ trim((string) ($row['jenjang'] ?? '')) !== '' ? $row['jenjang'] : '-' }}</td>
+                            <td>{{ trim((string) ($row['kelas'] ?? '')) !== '' ? $row['kelas'] : '-' }}</td>
                             <td class="mk-col-action">
                                 <form method="POST" action="{{ route('master.kelas.destroy', ['id' => $row['id'] ?? 0]) }}" class="mk-delete-form" onsubmit="return confirm('Yakin hapus data kelas ini?');">
                                     @csrf

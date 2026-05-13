@@ -41,7 +41,18 @@
                     <select name="kelas_sumber" id="pkKelasSumber" required>
                         <option value="">Pilih kelas asal</option>
                         @foreach (($kelasRows ?? []) as $k)
-                            @php $kid=(int)($k['id']??0); $label=trim((string)($k['unit']??'')).' - '.trim((string)($k['kelas']??'')); @endphp
+                            @php
+                                $kid = (int) ($k['id'] ?? 0);
+                                $u = trim((string) ($k['unit'] ?? ''));
+                                $jg = trim((string) ($k['jenjang'] ?? ''));
+                                $kl = trim((string) ($k['kelas'] ?? ''));
+                                $label = $u;
+                                if ($jg !== '') {
+                                    $label .= ' — ' . $jg . ($kl !== '' ? ' · ' . $kl : '');
+                                } elseif ($kl !== '') {
+                                    $label .= ' — ' . $kl;
+                                }
+                            @endphp
                             <option value="{{ $kid }}" {{ ($kelasSumber ?? 0)===$kid ? 'selected' : '' }}>{{ $label }}</option>
                         @endforeach
                     </select>
@@ -51,7 +62,18 @@
                     <select name="kelas_tujuan" id="pkKelasTujuan" required>
                         <option value="">Pilih kelas tujuan</option>
                         @foreach (($kelasRows ?? []) as $k)
-                            @php $kid=(int)($k['id']??0); $label=trim((string)($k['unit']??'')).' - '.trim((string)($k['kelas']??'')); @endphp
+                            @php
+                                $kid = (int) ($k['id'] ?? 0);
+                                $u = trim((string) ($k['unit'] ?? ''));
+                                $jg = trim((string) ($k['jenjang'] ?? ''));
+                                $kl = trim((string) ($k['kelas'] ?? ''));
+                                $label = $u;
+                                if ($jg !== '') {
+                                    $label .= ' — ' . $jg . ($kl !== '' ? ' · ' . $kl : '');
+                                } elseif ($kl !== '') {
+                                    $label .= ' — ' . $kl;
+                                }
+                            @endphp
                             <option value="{{ $kid }}" {{ ($kelasTujuan ?? 0)===$kid ? 'selected' : '' }}>{{ $label }}</option>
                         @endforeach
                     </select>
