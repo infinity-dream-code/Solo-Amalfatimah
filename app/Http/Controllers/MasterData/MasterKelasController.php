@@ -26,10 +26,13 @@ class MasterKelasController extends Controller
             $keywordLower = mb_strtolower($keyword);
             $rows = array_values(array_filter($rows, static function ($row) use ($keywordLower) {
                 $unit = mb_strtolower((string) ($row['unit'] ?? ''));
+                // Kolom DB: jenjang = label "Kelas" di UI; kelas = label "Kelompok" di UI.
+                $jenjang = mb_strtolower((string) ($row['jenjang'] ?? ''));
                 $kelas = mb_strtolower((string) ($row['kelas'] ?? ''));
                 $kelompok = mb_strtolower((string) ($row['kelompok'] ?? ''));
 
                 return str_contains($unit, $keywordLower)
+                    || str_contains($jenjang, $keywordLower)
                     || str_contains($kelas, $keywordLower)
                     || str_contains($kelompok, $keywordLower);
             }));
