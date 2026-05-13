@@ -44,16 +44,24 @@
         </thead>
         <tbody>
             @forelse ($rows as $index => $row)
+                @php
+                    $r = array_change_key_case((array) $row, CASE_LOWER);
+                    $nocust = trim((string) ($r['nocust'] ?? ''));
+                    $vaDigits = preg_replace('/\D+/', '', $nocust);
+                    $c01 = trim((string) ($r['code01'] ?? ''));
+                    $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
+                    $unitLabel = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                @endphp
                 <tr>
                     <td class="text-center">{{ $index + 1 }}</td>
-                    <td>{{ $row['nocust'] ?? '-' }}</td>
-                    <td>{{ '7510050' . preg_replace('/\D+/', '', (string) ($row['nocust'] ?? '')) }}</td>
-                    <td>{{ $row['nmcust'] ?? '-' }}</td>
-                    <td>{{ $row['num2nd'] ?? '-' }}</td>
-                    <td>{{ $row['code02'] ?? '-' }}</td>
-                    <td>{{ $row['desc02'] ?? '-' }}</td>
-                    <td>{{ $row['desc03'] ?? '-' }}</td>
-                    <td>{{ $row['desc04'] ?? '-' }}</td>
+                    <td>{{ $nocust !== '' ? $nocust : '-' }}</td>
+                    <td>{{ $vaDigits !== '' ? ('7510050' . $vaDigits) : '-' }}</td>
+                    <td>{{ trim((string) ($r['nmcust'] ?? '')) !== '' ? $r['nmcust'] : '-' }}</td>
+                    <td>{{ trim((string) ($r['num2nd'] ?? '')) !== '' ? $r['num2nd'] : '-' }}</td>
+                    <td>{{ $unitLabel }}</td>
+                    <td>{{ trim((string) ($r['desc02'] ?? '')) !== '' ? $r['desc02'] : '-' }}</td>
+                    <td>{{ trim((string) ($r['desc03'] ?? '')) !== '' ? $r['desc03'] : '-' }}</td>
+                    <td>{{ trim((string) ($r['desc04'] ?? '')) !== '' ? $r['desc04'] : '-' }}</td>
                 </tr>
             @empty
                 <tr>

@@ -77,18 +77,23 @@ class DataSiswaController extends Controller
             fwrite($output, implode("\t", $headers) . PHP_EOL);
 
             foreach ($rows as $index => $row) {
-                $digits = preg_replace('/\D+/', '', (string) ($row['nocust'] ?? ''));
-                $noVa = '7510050' . ($digits !== '' ? $digits : '0');
+                $r = array_change_key_case((array) $row, CASE_LOWER);
+                $nocust = trim((string) ($r['nocust'] ?? ''));
+                $vaDigits = preg_replace('/\D+/', '', $nocust);
+                $noVa = $vaDigits !== '' ? ('7510050' . $vaDigits) : '-';
+                $c01 = trim((string) ($r['code01'] ?? ''));
+                $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
+                $unitLabel = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
                 $line = [
                     (string) ($index + 1),
-                    (string) ($row['nocust'] ?? ''),
+                    $nocust !== '' ? $nocust : '-',
                     $noVa,
-                    (string) ($row['nmcust'] ?? ''),
-                    (string) ($row['num2nd'] ?? ''),
-                    (string) ($row['code02'] ?? ''),
-                    (string) ($row['desc02'] ?? ''),
-                    (string) ($row['desc03'] ?? ''),
-                    (string) ($row['desc04'] ?? ''),
+                    trim((string) ($r['nmcust'] ?? '')) !== '' ? (string) $r['nmcust'] : '-',
+                    trim((string) ($r['num2nd'] ?? '')) !== '' ? (string) $r['num2nd'] : '-',
+                    $unitLabel,
+                    trim((string) ($r['desc02'] ?? '')) !== '' ? (string) $r['desc02'] : '-',
+                    trim((string) ($r['desc03'] ?? '')) !== '' ? (string) $r['desc03'] : '-',
+                    trim((string) ($r['desc04'] ?? '')) !== '' ? (string) $r['desc04'] : '-',
                 ];
                 fwrite($output, implode("\t", array_map(static fn ($v) => str_replace(["\r", "\n", "\t"], ' ', $v), $line)) . PHP_EOL);
             }
@@ -181,7 +186,7 @@ class DataSiswaController extends Controller
         return [
             'search' => $search,
             'desc04' => $ui['angkatan'] !== '' ? $ui['angkatan'] : null,
-            'code02' => $ui['sekolah'] !== '' ? $ui['sekolah'] : null,
+            'code01' => $ui['sekolah'] !== '' ? $ui['sekolah'] : null,
             'desc02' => $ui['kelas'] !== '' ? $ui['kelas'] : null,
         ];
     }

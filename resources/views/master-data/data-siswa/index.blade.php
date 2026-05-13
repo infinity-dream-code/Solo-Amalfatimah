@@ -231,7 +231,18 @@
                         <select id="sekolah" name="sekolah">
                             <option value="">Semua</option>
                             @foreach (($filterOptions['sekolah'] ?? []) as $opt)
-                                <option value="{{ $opt }}" {{ ($sekolah ?? '') === $opt ? 'selected' : '' }}>{{ $opt }}</option>
+                                @php
+                                    if (is_array($opt)) {
+                                        $sekVal = (string) ($opt['code01'] ?? $opt['CODE01'] ?? '');
+                                        $sekLab = (string) ($opt['label'] ?? $opt['LABEL'] ?? $sekVal);
+                                    } else {
+                                        $sekVal = (string) $opt;
+                                        $sekLab = $sekVal;
+                                    }
+                                @endphp
+                                @if ($sekVal !== '')
+                                    <option value="{{ $sekVal }}" {{ ($sekolah ?? '') === $sekVal ? 'selected' : '' }}>{{ $sekLab }}</option>
+                                @endif
                             @endforeach
                         </select>
                     </div>
@@ -306,16 +317,24 @@
                     </thead>
                     <tbody>
                         @forelse (($siswaRows ?? []) as $index => $row)
+                            @php
+                                $r = array_change_key_case((array) $row, CASE_LOWER);
+                                $nocust = trim((string) ($r['nocust'] ?? ''));
+                                $vaDigits = preg_replace('/\D+/', '', $nocust);
+                                $c01 = trim((string) ($r['code01'] ?? ''));
+                                $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
+                                $unitLabel = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                            @endphp
                             <tr>
                                 <td class="ds-col-no">{{ ($siswaRows->firstItem() ?? 1) + $index }}</td>
-                                <td>{{ $row['nocust'] ?? '-' }}</td>
-                                <td>{{ '7510050' . preg_replace('/\D+/', '', (string) ($row['nocust'] ?? '')) }}</td>
-                                <td>{{ $row['nmcust'] ?? '-' }}</td>
-                                <td>{{ $row['num2nd'] ?? '-' }}</td>
-                                <td>{{ $row['code02'] ?? '-' }}</td>
-                                <td>{{ $row['desc02'] ?? '-' }}</td>
-                                <td>{{ $row['desc03'] ?? '-' }}</td>
-                                <td>{{ $row['desc04'] ?? '-' }}</td>
+                                <td>{{ $nocust !== '' ? $nocust : '-' }}</td>
+                                <td>{{ $vaDigits !== '' ? ('7510050' . $vaDigits) : '-' }}</td>
+                                <td>{{ trim((string) ($r['nmcust'] ?? '')) !== '' ? $r['nmcust'] : '-' }}</td>
+                                <td>{{ trim((string) ($r['num2nd'] ?? '')) !== '' ? $r['num2nd'] : '-' }}</td>
+                                <td>{{ $unitLabel }}</td>
+                                <td>{{ trim((string) ($r['desc02'] ?? '')) !== '' ? $r['desc02'] : '-' }}</td>
+                                <td>{{ trim((string) ($r['desc03'] ?? '')) !== '' ? $r['desc03'] : '-' }}</td>
+                                <td>{{ trim((string) ($r['desc04'] ?? '')) !== '' ? $r['desc04'] : '-' }}</td>
                                 <td class="ds-col-act">
                                     <button type="button" class="ds-btn-reset-login" disabled title="Menunggu endpoint web service">Reset</button>
                                 </td>

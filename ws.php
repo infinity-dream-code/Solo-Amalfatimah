@@ -856,36 +856,48 @@ function createAkun(array $req): array
 /**
  * @return array{0: list<string>, 1: array<string, mixed>}
  */
-function scctcustSiswaWhereFromReq(array $req): array
+function scctcustSiswaWhereFromReq(array $req, string $tableAlias = ""): array
 {
     $where = [];
     $params = [];
+    $p = $tableAlias !== "" ? $tableAlias . "." : "";
 
     if (!empty($req["search"])) {
         $q = "%" . trim((string) $req["search"]) . "%";
-        $where[] = "(TRIM(NMCUST) LIKE :search OR TRIM(NOCUST) LIKE :search2 OR TRIM(NUM2ND) LIKE :search3)";
+        $where[] = "(TRIM({$p}NMCUST) LIKE :search OR TRIM({$p}NOCUST) LIKE :search2 OR TRIM({$p}NUM2ND) LIKE :search3)";
         $params[":search"] = $q;
         $params[":search2"] = $q;
         $params[":search3"] = $q;
     }
 
     if (!empty($req["DESC04"])) {
-        $where[] = "TRIM(DESC04) = :DESC04";
+        $where[] = "TRIM({$p}DESC04) = :DESC04";
         $params[":DESC04"] = trim((string) $req["DESC04"]);
     }
 
-    if (!empty($req["CODE02"])) {
-        $where[] = "TRIM(CODE02) = :CODE02";
-        $params[":CODE02"] = trim((string) $req["CODE02"]);
+    if (!empty($req["CODE01"])) {
+        $where[] = "TRIM({$p}CODE01) = :CODE01_SISWA";
+        $params[":CODE01_SISWA"] = trim((string) $req["CODE01"]);
+    } elseif (!empty($req["CODE02"])) {
+        $sek = trim((string) $req["CODE02"]);
+        $where[] = "(
+            TRIM({$p}CODE02) = :CODE02
+            OR TRIM({$p}CODE01) IN (
+                SELECT TRIM(msf.CODE01)
+                FROM mst_sekolah msf
+                WHERE TRIM(msf.DESC01) = :CODE02
+            )
+        )";
+        $params[":CODE02"] = $sek;
     }
 
     if (!empty($req["DESC02"])) {
-        $where[] = "TRIM(DESC02) = :DESC02";
+        $where[] = "TRIM({$p}DESC02) = :DESC02";
         $params[":DESC02"] = trim((string) $req["DESC02"]);
     }
 
     if (isset($req["STCUST"]) && $req["STCUST"] !== "") {
-        $where[] = "STCUST = :STCUST";
+        $where[] = "{$p}STCUST = :STCUST";
         $params[":STCUST"] = trim((string) $req["STCUST"]);
     }
 
@@ -918,36 +930,37 @@ function getSiswa(array $req): array
 {
     $pdo = dbConnectPdo();
 
-    [$where, $params] = scctcustSiswaWhereFromReq($req);
+    [$where, $params] = scctcustSiswaWhereFromReq($req, "c");
 
     $sql = "
         SELECT
-            CUSTID,
-            TRIM(NOCUST) AS NOCUST,
-            TRIM(NMCUST) AS NMCUST,
-            TRIM(NUM2ND) AS NUM2ND,
-            STCUST,
-            TRIM(CODE01) AS CODE01,
-            TRIM(DESC01) AS DESC01,
-            TRIM(CODE02) AS CODE02,
-            TRIM(DESC02) AS DESC02,
-            TRIM(CODE03) AS CODE03,
-            TRIM(DESC03) AS DESC03,
-            TRIM(CODE04) AS CODE04,
-            TRIM(DESC04) AS DESC04,
-            TRIM(CODE05) AS CODE05,
-            TRIM(DESC05) AS DESC05,
-            TRIM(TOTPAY) AS TOTPAY,
-            TRIM(GENUS) AS GENUS,
-            LastUpdate
-        FROM scctcust
+            c.CUSTID AS custid,
+            TRIM(c.NOCUST) AS nocust,
+            TRIM(c.NMCUST) AS nmcust,
+            TRIM(c.NUM2ND) AS num2nd,
+            c.STCUST AS stcust,
+            TRIM(c.CODE01) AS code01,
+            TRIM(c.DESC01) AS desc01,
+            TRIM(c.CODE02) AS code02,
+            TRIM(c.DESC02) AS desc02,
+            TRIM(c.CODE03) AS code03,
+            TRIM(c.DESC03) AS desc03,
+            TRIM(c.CODE04) AS code04,
+            TRIM(c.DESC04) AS desc04,
+            TRIM(c.CODE05) AS code05,
+            TRIM(c.DESC05) AS desc05,
+            TRIM(c.TOTPAY) AS totpay,
+            TRIM(c.GENUS) AS genus,
+            TRIM(ms.DESC01) AS unit_sekolah
+        FROM scctcust c
+        LEFT JOIN mst_sekolah ms ON TRIM(ms.CODE01) = TRIM(c.CODE01)
     ";
 
     if ($where !== []) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }
 
-    $sql .= " ORDER BY NMCUST ASC";
+    $sql .= " ORDER BY c.NMCUST ASC";
 
     $limit = (int) ($req["limit"] ?? 50);
     $offset = (int) ($req["offset"] ?? 0);
@@ -1047,14 +1060,42 @@ function getFilterSiswa(): array
     $stmtAngkatan->execute();
     $angkatan = array_column($stmtAngkatan->fetchAll(), "DESC04");
 
-    $stmtSekolah = $pdo->prepare("
-        SELECT DISTINCT TRIM(CODE02) AS CODE02
-        FROM scctcust
-        WHERE CODE02 IS NOT NULL AND TRIM(CODE02) != ''
-        ORDER BY CODE02 ASC
+    $stmtMs = $pdo->query("
+        SELECT TRIM(CODE01) AS code01, TRIM(DESC01) AS desc01
+        FROM mst_sekolah
+        WHERE CODE01 IS NOT NULL AND TRIM(CODE01) <> ''
+        ORDER BY CAST(TRIM(CODE01) AS UNSIGNED) DESC, TRIM(CODE01) DESC
     ");
-    $stmtSekolah->execute();
-    $sekolah = array_column($stmtSekolah->fetchAll(), "CODE02");
+    $sekolahByCode = [];
+    foreach ($stmtMs->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $c = trim((string) ($row["code01"] ?? $row["CODE01"] ?? ""));
+        if ($c === "") {
+            continue;
+        }
+        $d = trim((string) ($row["desc01"] ?? $row["DESC01"] ?? ""));
+        $sekolahByCode[$c] = [
+            "code01" => $c,
+            "desc01" => $d,
+            "label"  => $d !== "" ? "{$c} — {$d}" : $c,
+        ];
+    }
+    $stmtOrphan = $pdo->query("
+        SELECT DISTINCT TRIM(CODE01) AS code01
+        FROM scctcust
+        WHERE CODE01 IS NOT NULL AND TRIM(CODE01) <> ''
+    ");
+    foreach ($stmtOrphan->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $c = trim((string) ($row["code01"] ?? $row["CODE01"] ?? ""));
+        if ($c === "" || isset($sekolahByCode[$c])) {
+            continue;
+        }
+        $sekolahByCode[$c] = [
+            "code01" => $c,
+            "desc01" => "",
+            "label"  => $c,
+        ];
+    }
+    $sekolah = array_values($sekolahByCode);
 
     $stmtKelas = $pdo->prepare("
         SELECT DISTINCT TRIM(CODE02) AS CODE02, TRIM(DESC02) AS DESC02
@@ -1089,26 +1130,27 @@ function getSiswaByCustid(array $req): array
 
     $stmt = $pdo->prepare("
         SELECT
-            CUSTID,
-            TRIM(NOCUST) AS NOCUST,
-            TRIM(NMCUST) AS NMCUST,
-            TRIM(NUM2ND) AS NUM2ND,
-            STCUST,
-            TRIM(CODE01) AS CODE01,
-            TRIM(DESC01) AS DESC01,
-            TRIM(CODE02) AS CODE02,
-            TRIM(DESC02) AS DESC02,
-            TRIM(CODE03) AS CODE03,
-            TRIM(DESC03) AS DESC03,
-            TRIM(CODE04) AS CODE04,
-            TRIM(DESC04) AS DESC04,
-            TRIM(CODE05) AS CODE05,
-            TRIM(DESC05) AS DESC05,
-            TRIM(TOTPAY) AS TOTPAY,
-            TRIM(GENUS) AS GENUS,
-            LastUpdate
-        FROM scctcust
-        WHERE CUSTID = :CUSTID
+            c.CUSTID AS custid,
+            TRIM(c.NOCUST) AS nocust,
+            TRIM(c.NMCUST) AS nmcust,
+            TRIM(c.NUM2ND) AS num2nd,
+            c.STCUST AS stcust,
+            TRIM(c.CODE01) AS code01,
+            TRIM(c.DESC01) AS desc01,
+            TRIM(c.CODE02) AS code02,
+            TRIM(c.DESC02) AS desc02,
+            TRIM(c.CODE03) AS code03,
+            TRIM(c.DESC03) AS desc03,
+            TRIM(c.CODE04) AS code04,
+            TRIM(c.DESC04) AS desc04,
+            TRIM(c.CODE05) AS code05,
+            TRIM(c.DESC05) AS desc05,
+            TRIM(c.TOTPAY) AS totpay,
+            TRIM(c.GENUS) AS genus,
+            TRIM(ms.DESC01) AS unit_sekolah
+        FROM scctcust c
+        LEFT JOIN mst_sekolah ms ON TRIM(ms.CODE01) = TRIM(c.CODE01)
+        WHERE c.CUSTID = :CUSTID
     ");
 
     $stmt->execute([":CUSTID" => $custid]);
