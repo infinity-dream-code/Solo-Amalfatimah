@@ -25,7 +25,7 @@
 
     <div class="page-heading">
         <h2>Pindah Kelas</h2>
-        <p>Pindahkan siswa per pilihan atau seluruh kelas.</p>
+        <p>Tanpa centang = pindah <strong>semua</strong> siswa di kelas asal; centang satu atau lebih = hanya siswa terpilih.</p>
     </div>
 
     <div class="pk-card">
@@ -86,13 +86,6 @@
                     <label>NIS / Nama Siswa (filter)</label>
                     <input type="text" name="search" value="{{ $search ?? '' }}" placeholder="Cari NIS / Nama">
                 </div>
-                <div class="pk-fld">
-                    <label>Pemindahan</label>
-                    <select name="mode">
-                        <option value="pilihan" {{ ($mode ?? 'pilihan') === 'pilihan' ? 'selected' : '' }}>Pindahkan Hanya Anak Yang Dipilih</option>
-                        <option value="semua" {{ ($mode ?? 'pilihan') === 'semua' ? 'selected' : '' }}>Pindahkan semua Anak Pada Kelas</option>
-                    </select>
-                </div>
             </div>
         </form>
 
@@ -101,13 +94,12 @@
             <input type="hidden" name="kelas_sumber" id="pkKelasSumberHidden" value="{{ $kelasSumber ?? 0 }}">
             <input type="hidden" name="kelas_tujuan" id="pkKelasTujuanHidden" value="{{ $kelasTujuan ?? 0 }}">
             <input type="hidden" name="search" value="{{ $search ?? '' }}">
-            <input type="hidden" name="mode" value="{{ $mode ?? 'pilihan' }}">
 
             <div class="pk-table-wrap">
                 <table class="pk-table">
                     <thead>
                         <tr>
-                            <th style="width:40px;">#</th>
+                            <th style="width:40px;" title="Centang siswa yang dipindahkan; kosongkan semua untuk pindah semua">#</th>
                             <th>NIS</th>
                             <th>NAMA</th>
                             <th>NO DAFTAR</th>
@@ -119,9 +111,7 @@
                         @forelse (($siswaRows ?? []) as $row)
                             <tr>
                                 <td>
-                                    @if (($mode ?? 'pilihan') === 'pilihan')
-                                        <input type="checkbox" name="custids[]" value="{{ (int) ($row['custid'] ?? 0) }}">
-                                    @endif
+                                    <input type="checkbox" name="custids[]" value="{{ (int) ($row['custid'] ?? 0) }}">
                                 </td>
                                 <td>{{ $row['nocust'] ?? '-' }}</td>
                                 <td>{{ $row['nmcust'] ?? '-' }}</td>
@@ -180,6 +170,13 @@
                 if (sumberHidden.value !== '' && tujuanHidden.value !== '' && sumberHidden.value === tujuanHidden.value) {
                     e.preventDefault();
                     alert('Kelas asal dan kelas tujuan tidak boleh sama.');
+                    return;
+                }
+                const boxes = moveForm.querySelectorAll('input[name="custids[]"]:checked');
+                if (boxes.length === 0) {
+                    if (!confirm('Tidak ada siswa yang dicentang. Pindahkan SEMUA siswa di kelas asal ke kelas tujuan?')) {
+                        e.preventDefault();
+                    }
                 }
             });
         })();

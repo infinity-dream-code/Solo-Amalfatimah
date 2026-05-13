@@ -16,10 +16,6 @@ class PindahKelasController extends Controller
         $kelasSumber = (int) $request->query('kelas_sumber', 0);
         $kelasTujuan = (int) $request->query('kelas_tujuan', 0);
         $search = trim((string) $request->query('search', ''));
-        $mode = trim((string) $request->query('mode', 'pilihan'));
-        if (!in_array($mode, ['pilihan', 'semua'], true)) {
-            $mode = 'pilihan';
-        }
         $page = max(1, (int) $request->query('page', 1));
         $perPage = 10;
         $offset = ($page - 1) * $perPage;
@@ -54,7 +50,6 @@ class PindahKelasController extends Controller
             'kelasSumber' => $kelasSumber,
             'kelasTujuan' => $kelasTujuan,
             'search' => $search,
-            'mode' => $mode,
             'siswaRows' => $paginator,
             'errorMsg' => $error,
         ]);
@@ -70,7 +65,6 @@ class PindahKelasController extends Controller
         $validated = $request->validate([
             'kelas_sumber' => ['required', 'integer', 'min:1'],
             'kelas_tujuan' => ['required', 'integer', 'min:1', 'different:kelas_sumber'],
-            'mode' => ['required', 'in:pilihan,semua'],
             'custids' => ['nullable', 'array'],
             'custids.*' => ['integer', 'min:1'],
             'search' => ['nullable', 'string'],
@@ -78,18 +72,18 @@ class PindahKelasController extends Controller
             'kelas_tujuan.different' => 'Kelas asal dan kelas tujuan tidak boleh sama.',
         ]);
 
-        $mode = (string) $validated['mode'];
-        $custids = $mode === 'pilihan' ? (array) ($validated['custids'] ?? []) : [];
-        if ($mode === 'pilihan' && count($custids) === 0) {
-            return back()->withErrors(['custids' => 'Pilih minimal satu siswa.'])->withInput();
-        }
+        $custids = array_values(array_unique(array_filter(
+            array_map('intval', (array) ($validated['custids'] ?? [])),
+            static fn (int $v): bool => $v > 0
+        )));
+        $mode = count($custids) > 0 ? 'pilihan' : 'semua';
 
         $res = $api->pindahKelas((int) $validated['kelas_sumber'], (int) $validated['kelas_tujuan'], $mode, $custids);
         if (!$res['ok']) {
-            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search', 'mode']))->with('error', $res['message']);
+            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))->with('error', $res['message']);
         }
         $totalDipindah = (int) (($res['data']['total_dipindah'] ?? 0));
-        return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search', 'mode']))
+        return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
             ->with('status', "Pemindahan kelas berhasil. Total dipindah: {$totalDipindah}");
     }
 
