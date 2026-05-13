@@ -211,6 +211,35 @@ class AmalFatimahApiService
         return array_values($units);
     }
 
+    /**
+     * Opsi Unit untuk Master Kelas: gabungan nama unit dari Master Sekolah (DESC01)
+     * dan unit yang sudah dipakai di Master Kelas (agar data lama tetap muncul).
+     *
+     * @return list<string>
+     */
+    public function getKelasUnitOptions(): array
+    {
+        $units = [];
+
+        foreach ($this->getSekolah() as $row) {
+            $u = trim((string) ($row['desc01'] ?? ''));
+            if ($u !== '') {
+                $units[$u] = $u;
+            }
+        }
+
+        foreach ($this->getKelasUnits() as $u) {
+            $u = trim((string) $u);
+            if ($u !== '') {
+                $units[$u] = $u;
+            }
+        }
+
+        ksort($units);
+
+        return array_values($units);
+    }
+
     public function deleteKelas(int $id): bool
     {
         $url = config('services.ws_amal_fatimah.url');
@@ -778,6 +807,64 @@ class AmalFatimahApiService
         } catch (\Throwable $e) {
             Log::error('[WS Amal Fatimah] getSiswa: ' . $e->getMessage());
             return [];
+        }
+    }
+
+    public function createSiswa(array $payload): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'createSiswa', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'createSiswa',
+            'token' => $token,
+            'NIS' => trim((string) ($payload['nis'] ?? $payload['NIS'] ?? '')),
+            'NAMA' => trim((string) ($payload['nama'] ?? $payload['NAMA'] ?? '')),
+            'NUM2ND' => trim((string) ($payload['nodaf'] ?? $payload['NUM2ND'] ?? '')),
+            'CODE02' => trim((string) ($payload['unit'] ?? $payload['CODE02'] ?? '')),
+            'CODE03' => trim((string) ($payload['kelas_id'] ?? $payload['CODE03'] ?? '')),
+            'DESC03' => trim((string) ($payload['kelompok'] ?? $payload['DESC03'] ?? '')),
+            'DESC04' => trim((string) ($payload['angkatan'] ?? $payload['DESC04'] ?? '')),
+            'CODE04' => trim((string) ($payload['gender'] ?? $payload['CODE04'] ?? '')),
+            'DESC05' => trim((string) ($payload['alamat'] ?? $payload['DESC05'] ?? '')),
+        ];
+        $body = array_filter($body, static function ($v, $k) {
+            if (in_array($k, ['method', 'token', 'NIS', 'NAMA'], true)) {
+                return true;
+            }
+            return $v !== '';
+        }, ARRAY_FILTER_USE_BOTH);
+
+        try {
+            $response = Http::timeout(20)->post($url, $body);
+            $json = $response->json();
+
+            if ($response->successful() && (int) ($json['status'] ?? 0) === 201) {
+                return [
+                    'ok' => true,
+                    'message' => (string) ($json['message'] ?? 'Data siswa berhasil ditambahkan'),
+                    'data' => $json['data'] ?? [],
+                ];
+            }
+
+            Log::warning('[WS Amal Fatimah] createSiswa failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [
+                'ok' => false,
+                'message' => (string) ($json['message'] ?? 'Gagal menambahkan data siswa'),
+                'data' => [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] createSiswa: ' . $e->getMessage());
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi web service',
+                'data' => [],
+            ];
         }
     }
 

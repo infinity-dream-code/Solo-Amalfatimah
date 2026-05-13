@@ -120,9 +120,28 @@ class DataSiswaController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, AmalFatimahApiService $api): RedirectResponse
     {
-        return redirect()->route('master.data_siswa')->with('status', 'Data Siswa tersimpan (dummy).');
+        $validated = $request->validate([
+            'nis' => ['required', 'string', 'max:50'],
+            'nama' => ['required', 'string', 'max:200'],
+        ], [
+            'nis.required' => 'NIS wajib diisi.',
+            'nama.required' => 'Nama wajib diisi.',
+        ]);
+
+        $result = $api->createSiswa([
+            'nis' => $validated['nis'],
+            'nama' => $validated['nama'],
+        ]);
+
+        if (!($result['ok'] ?? false)) {
+            return back()
+                ->withInput()
+                ->withErrors(['api' => $result['message'] ?? 'Gagal menyimpan data siswa.']);
+        }
+
+        return redirect()->route('master.data_siswa')->with('status', 'Data siswa berhasil disimpan.');
     }
 
     public function edit(string $id): View

@@ -971,6 +971,69 @@ function getSiswa(array $req): array
     return $stmt->fetchAll();
 }
 
+function createSiswa(array $req): array
+{
+    $nis = trim((string) ($req["NIS"] ?? $req["nocust"] ?? ""));
+    $nama = trim((string) ($req["NAMA"] ?? $req["nama"] ?? $req["nmcust"] ?? ""));
+    if ($nis === "" || $nama === "") {
+        http_response_code(422);
+        echo json_encode([
+            "status" => 422,
+            "message" => "NIS dan Nama wajib diisi",
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $nodaf = trim((string) ($req["NUM2ND"] ?? $req["nodaf"] ?? ""));
+    $unit = trim((string) ($req["CODE02"] ?? $req["unit"] ?? ""));
+    $kelas = trim((string) ($req["CODE03"] ?? $req["kelas_id"] ?? $req["kode_prod"] ?? ""));
+    $kelompok = trim((string) ($req["DESC03"] ?? $req["kelompok"] ?? ""));
+    $angkatan = trim((string) ($req["DESC04"] ?? $req["angkatan"] ?? ""));
+    $gender = trim((string) ($req["CODE04"] ?? $req["gender"] ?? ""));
+    $alamat = trim((string) ($req["DESC05"] ?? $req["alamat"] ?? ""));
+
+    $pdo = dbConnectPdo();
+
+    $check = $pdo->prepare("SELECT CUSTID FROM scctcust WHERE TRIM(NOCUST) = :nis LIMIT 1");
+    $check->execute([":nis" => $nis]);
+    if ($check->fetch()) {
+        http_response_code(409);
+        echo json_encode([
+            "status" => 409,
+            "message" => "Siswa dengan NIS tersebut sudah ada",
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO scctcust
+            (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS)
+        VALUES
+            (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04_G, :DESC05, :GENUS)
+    ");
+
+    $stmt->execute([
+        ":NOCUST" => $nis,
+        ":NMCUST" => $nama,
+        ":NUM2ND" => $nodaf !== "" ? $nodaf : null,
+        ":CODE02" => $unit !== "" ? $unit : null,
+        ":CODE03" => $kelas !== "" ? $kelas : null,
+        ":DESC03" => $kelompok !== "" ? $kelompok : null,
+        ":DESC04" => $angkatan !== "" ? $angkatan : null,
+        ":CODE04_G" => $gender !== "" ? $gender : null,
+        ":DESC05" => $alamat !== "" ? $alamat : null,
+        ":GENUS" => '',
+    ]);
+
+    $newId = (int) $pdo->lastInsertId();
+
+    return [
+        "CUSTID" => $newId,
+        "NOCUST" => $nis,
+        "NMCUST" => $nama,
+    ];
+}
+
 function getFilterSiswa(): array
 {
     $pdo = dbConnectPdo();
@@ -6331,6 +6394,19 @@ try {
             "status" => 200,
             "method" => "getSiswa",
             "data"   => $rows
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === "createSiswa") {
+        $row = createSiswa($req);
+
+        http_response_code(201);
+        echo json_encode([
+            "status"  => 201,
+            "method"  => "createSiswa",
+            "message" => "Data siswa berhasil ditambahkan",
+            "data"    => $row,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
