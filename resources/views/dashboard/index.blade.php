@@ -470,14 +470,12 @@
                 <div class="sidebar-subnav {{ request()->routeIs('keu.tagihan.*') ? 'open' : '' }}" id="tagihanSiswaSubnav" style="padding-left:14px;">
                     <a href="{{ route('keu.tagihan.buat') }}" class="{{ request()->routeIs('keu.tagihan.buat') ? 'active' : '' }}">Buat Tagihan</a>
                     <a href="{{ route('keu.tagihan.upload_excel') }}" class="{{ request()->routeIs('keu.tagihan.upload_excel') ? 'active' : '' }}">Upload Tagihan Excel</a>
-                    <a href="{{ route('keu.tagihan.upload_pmb') }}" class="{{ request()->routeIs('keu.tagihan.upload_pmb') ? 'active' : '' }}">Upload Tagihan PMB</a>
                     <a href="{{ route('keu.tagihan.data') }}" class="{{ request()->routeIs('keu.tagihan.data') ? 'active' : '' }}">Data Tagihan</a>
                     <a href="{{ route('keu.tagihan.export') }}" class="{{ request()->routeIs('keu.tagihan.export') ? 'active' : '' }}">Export Tagihan</a>
                     <a href="{{ route('keu.tagihan.rekap') }}" class="{{ request()->routeIs('keu.tagihan.rekap') ? 'active' : '' }}">Rekap Tagihan</a>
                 </div>
                 <a href="{{ route('keu.manual') }}" class="{{ request()->routeIs('keu.manual') ? 'active' : '' }}">Manual Pembayaran</a>
                 <a href="{{ route('keu.manual_nis') }}" class="{{ request()->routeIs('keu.manual_nis') ? 'active' : '' }}">Manual Pembayaran NIS</a>
-                <a href="{{ route('keu.manual_non_siswa') }}" class="{{ request()->routeIs('keu.manual_non_siswa') ? 'active' : '' }}">Manual Pembayaran No Pendaftaran</a>
                 <button type="button" class="sidebar-item has-children {{ request()->routeIs('keu.penerimaan.*') ? 'open' : '' }}" id="penerimaanSiswaToggle" onclick="togglePenerimaanSiswa()">
                     Penerimaan Siswa
                     <span class="chevron">›</span>

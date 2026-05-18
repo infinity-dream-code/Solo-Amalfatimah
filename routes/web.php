@@ -116,6 +116,7 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::get('/tagihan-siswa/buat-tagihan/daftar-harga', [TagihanSiswaController::class, 'daftarHarga'])->name('tagihan.daftar_harga');
         Route::post('/tagihan-siswa/buat-tagihan', [TagihanSiswaController::class, 'store'])->name('tagihan.store');
         Route::get('/tagihan-siswa/upload-tagihan-excel', [TagihanSiswaController::class, 'uploadExcel'])->name('tagihan.upload_excel');
+        Route::get('/tagihan-siswa/upload-tagihan-excel/contoh', [TagihanSiswaController::class, 'uploadExcelContoh'])->name('tagihan.upload_excel.contoh');
         Route::post('/tagihan-siswa/upload-tagihan-excel/import', [TagihanSiswaController::class, 'uploadExcelImport'])->name('tagihan.upload_excel.import');
         Route::post('/tagihan-siswa/upload-tagihan-excel/save', [TagihanSiswaController::class, 'uploadExcelSave'])->name('tagihan.upload_excel.save');
         Route::post('/tagihan-siswa/upload-tagihan-excel/clear', [TagihanSiswaController::class, 'uploadExcelClear'])->name('tagihan.upload_excel.clear');

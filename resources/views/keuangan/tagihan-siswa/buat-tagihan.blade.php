@@ -63,8 +63,18 @@
                     <select name="kelas_id">
                         <option value="">Pilih Kelas</option>
                         @foreach (($filterOptions['kelas'] ?? []) as $k)
-                            @php $id=(string)($k['id'] ?? ''); $lbl=(string)(($k['unit']??'').' '.($k['kelas']??'')); @endphp
-                            <option value="{{ $id }}" {{ (($filters['kelas_id'] ?? '') === $id) ? 'selected' : '' }}>{{ trim($lbl) }}</option>
+                            @php
+                                $id = (string) ($k['id'] ?? '');
+                                $un = (string) ($k['unit'] ?? '');
+                                $kl = (string) ($k['kelas'] ?? '');
+                                $kp = (string) ($k['kelompok'] ?? '');
+                                $jg = (string) ($k['jenjang'] ?? '');
+                                $parts = array_values(array_filter([$un, $kl, $kp, $jg], static fn ($v) => $v !== ''));
+                                $lbl = implode(' - ', $parts);
+                            @endphp
+                            @if ($id !== '' && $lbl !== '')
+                                <option value="{{ $id }}" {{ (($filters['kelas_id'] ?? '') === $id) ? 'selected' : '' }}>{{ $lbl }}</option>
+                            @endif
                         @endforeach
                     </select>
                 </div>
@@ -306,31 +316,25 @@
 
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-            const loadDaftarHargaBySiswa = async () => {
-                const selectedSiswa = siswaChecks.find((el) => el.checked);
-                if (!selectedSiswa) return;
-                const kelasId = (
-                    selectedSiswa.dataset.kelasId ||
-                    selectedSiswa.dataset.kodeProd ||
-                    kelasSelect?.value ||
-                    ''
-                ).trim();
-                const angkatan = (selectedSiswa.dataset.angkatan || '').trim();
-                if (hiddenKelas) hiddenKelas.value = kelasId;
-                if (hiddenAngkatan) {
-                    hiddenAngkatan.value = (angkatan || angkatanSelect?.value || '').trim();
-                }
+            const serverAkunRowCount = document.querySelectorAll('#akun-tbody .check-akun').length;
 
-                if (!kelasId) {
+            const loadDaftarHarga = async (kelasId, angkatan) => {
+                const kelasIdTrim = (kelasId || '').trim();
+                const angkatanTrim = (angkatan || angkatanSelect?.value || '').trim();
+                if (hiddenKelas && kelasIdTrim) hiddenKelas.value = kelasIdTrim;
+                if (hiddenAngkatan && angkatanTrim) hiddenAngkatan.value = angkatanTrim;
+
+                if (!kelasIdTrim) {
                     renderAkunRows([]);
+                    updateAkunVisibility();
                     return;
                 }
                 try {
                     const url = new URL('{{ route('keu.tagihan.daftar_harga') }}', window.location.origin);
-                    url.searchParams.set('kelas_id', kelasId);
-                    url.searchParams.set('thn_angkatan', (hiddenAngkatan?.value || angkatan || '').trim());
-                    url.searchParams.set('thn_akademik', (hiddenAkademik?.value || '').trim());
-                    url.searchParams.set('tagihan', (hiddenTagihan?.value || '').trim());
+                    url.searchParams.set('kelas_id', kelasIdTrim);
+                    url.searchParams.set('thn_angkatan', angkatanTrim);
+                    url.searchParams.set('thn_akademik', (hiddenAkademik?.value || akademikSelect?.value || '').trim());
+                    url.searchParams.set('tagihan', (hiddenTagihan?.value || tagihanSelect?.value || '').trim());
                     const fetchOnce = async () => {
                         const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
                         const json = await res.json();
@@ -358,19 +362,35 @@
                 }
             };
 
+            const loadDaftarHargaBySiswa = async () => {
+                const selectedSiswa = siswaChecks.find((el) => el.checked);
+                if (!selectedSiswa) return;
+                const kelasId = (
+                    selectedSiswa.dataset.kelasId ||
+                    selectedSiswa.dataset.kodeProd ||
+                    kelasSelect?.value ||
+                    ''
+                ).trim();
+                const angkatan = (selectedSiswa.dataset.angkatan || angkatanSelect?.value || '').trim();
+                await loadDaftarHarga(kelasId, angkatan);
+            };
+
             const updateAkunVisibility = () => {
                 const hasSelectedSiswa = siswaChecks.some((el) => el.checked);
+                const currentAkunChecks = Array.from(document.querySelectorAll('.check-akun'));
+                const hasAkunRows = currentAkunChecks.length > 0;
+                const filterKelasId = (kelasSelect?.value || '').trim();
+
                 if (akunSection) {
-                    akunSection.style.display = hasSelectedSiswa ? '' : 'none';
+                    akunSection.style.display = (hasSelectedSiswa || hasAkunRows || filterKelasId !== '') ? '' : 'none';
                 }
-                if (!hasSelectedSiswa) {
+                if (!hasSelectedSiswa && !hasAkunRows && filterKelasId === '') {
                     Array.from(document.querySelectorAll('.check-akun')).forEach((el) => { el.checked = false; });
                     if (checkAllAkun) checkAllAkun.checked = false;
-                    renderAkunRows([]);
                 }
 
-                const currentAkunChecks = Array.from(document.querySelectorAll('.check-akun'));
-                const hasSelectedAkun = currentAkunChecks.some((el) => el.checked);
+                const currentAkunChecks2 = Array.from(document.querySelectorAll('.check-akun'));
+                const hasSelectedAkun = currentAkunChecks2.some((el) => el.checked);
                 if (btnBuat) {
                     btnBuat.disabled = !(hasSelectedSiswa && hasSelectedAkun);
                     btnBuat.style.opacity = btnBuat.disabled ? '0.6' : '1';
@@ -441,6 +461,17 @@
                 });
             }
             updateAkunVisibility();
+
+            const filterKelasOnLoad = (kelasSelect?.value || '').trim();
+            if (filterKelasOnLoad && serverAkunRowCount === 0) {
+                loadDaftarHarga(filterKelasOnLoad, angkatanSelect?.value || '');
+            } else if (serverAkunRowCount > 0) {
+                bindSelectAll('check-all-akun', 'check-akun');
+                Array.from(document.querySelectorAll('.check-akun')).forEach((el) => {
+                    el.addEventListener('change', updateAkunVisibility);
+                });
+                updateAkunVisibility();
+            }
         })();
     </script>
 @endsection

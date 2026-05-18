@@ -12,6 +12,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TagihanSiswaController extends Controller
@@ -195,12 +196,10 @@ class TagihanSiswaController extends Controller
         }
 
         $filterOptions = $api->getFilterBuatTagihan();
-        $akunPosts = $api->getAkun();
 
         return view('keuangan.tagihan-siswa.upload-tagihan-excel', [
             'pageTitle' => 'Upload Tagihan Excel',
             'filterOptions' => $filterOptions,
-            'akunPosts' => $akunPosts,
             'importRows' => $this->paginateTagihanExcelPreview($request),
             'keyword' => trim((string) $request->query('q', '')),
             'perPage' => $this->normalizePerPage((int) $request->query('per_page', 10)),
@@ -214,13 +213,12 @@ class TagihanSiswaController extends Controller
             'thn_akademik' => ['required', 'string'],
             'tagihan' => ['required', 'string'],
             'periode' => ['required', 'string'],
-            'kode_akun' => ['required', 'string'],
+            'kode_akun' => ['nullable', 'string'],
             'raw_rows' => ['required', 'string'],
         ], [
             'thn_akademik.required' => 'Tahun pelajaran wajib dipilih.',
             'tagihan.required' => 'Tagihan wajib dipilih.',
             'periode.required' => 'Periode belum terisi. Pilih tahun pelajaran dan tagihan.',
-            'kode_akun.required' => 'Post wajib dipilih.',
             'raw_rows.required' => 'File atau preview baris kosong.',
         ]);
 
@@ -322,6 +320,71 @@ class TagihanSiswaController extends Controller
         $this->forgetTagihanExcelPreviewCache();
 
         return redirect()->route('keu.tagihan.upload_excel')->with('status', 'Data pratinjau dibersihkan.');
+    }
+
+    public function uploadExcelContoh(): BinaryFileResponse
+    {
+        $path = public_path('tagihan_excel.xlsx');
+        if (!is_file($path)) {
+            $this->writeTagihanExcelSampleFile($path);
+        }
+
+        return response()->download($path, 'tagihan_excel.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    private function writeTagihanExcelSampleFile(string $path): void
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            throw new \RuntimeException('Ekstensi ZipArchive tidak tersedia untuk membuat contoh file.');
+        }
+
+        $sheetRows = <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetData>
+<row r="1"><c r="A1" t="inlineStr"><is><t>NIS</t></is></c><c r="B1" t="inlineStr"><is><t>NOMINAL</t></is></c></row>
+<row r="2"><c r="A2" t="inlineStr"><is><t>3000001107</t></is></c><c r="B2"><v>500000</v></c></row>
+<row r="3"><c r="A3" t="inlineStr"><is><t>3000001108</t></is></c><c r="B3"><v>500000</v></c></row>
+</sheetData>
+</worksheet>
+XML;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Gagal membuat file contoh tagihan excel.');
+        }
+
+        $zip->addFromString('[Content_Types].xml', <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>
+XML);
+        $zip->addFromString('_rels/.rels', <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>
+XML);
+        $zip->addFromString('xl/workbook.xml', <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Tagihan" sheetId="1" r:id="rId1"/></sheets>
+</workbook>
+XML);
+        $zip->addFromString('xl/_rels/workbook.xml.rels', <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>
+XML);
+        $zip->addFromString('xl/worksheets/sheet1.xml', $sheetRows);
+        $zip->close();
     }
 
     private function normalizePerPage(int $perPage): int

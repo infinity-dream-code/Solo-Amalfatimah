@@ -2366,6 +2366,98 @@ function getRekapPenerimaanFilterShell(): array
     return $base;
 }
 
+/**
+ * Hitung baris u_daftar_harga untuk kode_prod + tahun angkatan (opsional).
+ */
+function countDaftarHargaForKodeProd(PDO $pdo, string $kodeProd, string $thn_angkatan = '', string $thnAngkatanBase = ''): int
+{
+    $kodeProd = trim($kodeProd);
+    if ($kodeProd === '') {
+        return 0;
+    }
+
+    $sql = "
+        SELECT COUNT(*) AS cnt
+        FROM u_daftar_harga d
+        WHERE TRIM(d.kode_prod) = :kode_prod
+    ";
+    $params = [':kode_prod' => $kodeProd];
+
+    if ($thn_angkatan !== '' || $thnAngkatanBase !== '') {
+        $sql .= " AND (
+            REPLACE(TRIM(d.thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_full), ' ', '')
+            OR REPLACE(TRIM(d.thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_base_eq), ' ', '')
+            OR REPLACE(TRIM(d.thn_masuk), ' ', '') LIKE CONCAT(REPLACE(TRIM(:thn_angkatan_base_like), ' ', ''), '%')
+        )";
+        $baseAngkatan = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thn_angkatan;
+        $params[':thn_angkatan_full'] = $thn_angkatan;
+        $params[':thn_angkatan_base_eq'] = $baseAngkatan;
+        $params[':thn_angkatan_base_like'] = $baseAngkatan;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    return (int) ($stmt->fetchColumn() ?: 0);
+}
+
+/**
+ * Temukan kode_prod di u_daftar_harga dari id kelas (mst_kelas.id / kelompok / kode_fak).
+ */
+function resolveKodeProdForDaftarHarga(PDO $pdo, string $kelas_id, string $thn_angkatan = ''): string
+{
+    $kelas_id = trim($kelas_id);
+    if ($kelas_id === '') {
+        return '';
+    }
+
+    $thnAngkatanBase = trim((string) preg_replace('/\s*-\s*.*/', '', $thn_angkatan));
+    $candidates = [];
+
+    $stmtKelas = $pdo->prepare("SELECT TRIM(kelompok) AS kelompok FROM mst_kelas WHERE id = :id LIMIT 1");
+    $stmtKelas->execute([':id' => (int) $kelas_id]);
+    $kelasRow = $stmtKelas->fetch() ?: [];
+    $kelompok = trim((string) ($kelasRow['kelompok'] ?? ''));
+    if ($kelompok !== '') {
+        $candidates[] = $kelompok;
+    }
+    if (!in_array($kelas_id, $candidates, true)) {
+        $candidates[] = $kelas_id;
+    }
+
+    foreach ($candidates as $candidate) {
+        if (countDaftarHargaForKodeProd($pdo, $candidate, $thn_angkatan, $thnAngkatanBase) > 0) {
+            return $candidate;
+        }
+    }
+
+    $kelasPad2 = str_pad((string) ((int) $kelas_id), 2, '0', STR_PAD_LEFT);
+    $sqlResolve = "
+        SELECT TRIM(kode_prod) AS kode_prod
+        FROM u_daftar_harga
+        WHERE TRIM(kode_fak) = :kelas_pad2
+    ";
+    $paramsResolve = [':kelas_pad2' => $kelasPad2];
+    if ($thn_angkatan !== '' || $thnAngkatanBase !== '') {
+        $sqlResolve .= " AND (
+            REPLACE(TRIM(thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_full), ' ', '')
+            OR REPLACE(TRIM(thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_base_eq), ' ', '')
+            OR REPLACE(TRIM(thn_masuk), ' ', '') LIKE CONCAT(REPLACE(TRIM(:thn_angkatan_base_like), ' ', ''), '%')
+        )";
+        $baseAngkatan = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thn_angkatan;
+        $paramsResolve[':thn_angkatan_full'] = $thn_angkatan;
+        $paramsResolve[':thn_angkatan_base_eq'] = $baseAngkatan;
+        $paramsResolve[':thn_angkatan_base_like'] = $baseAngkatan;
+    }
+    $sqlResolve .= " ORDER BY urut ASC LIMIT 1";
+    $stmtResolve = $pdo->prepare($sqlResolve);
+    $stmtResolve->execute($paramsResolve);
+    $resolvedRow = $stmtResolve->fetch();
+    $resolved = trim((string) ($resolvedRow['kode_prod'] ?? ''));
+
+    return $resolved !== '' ? $resolved : $kelas_id;
+}
+
 function getBuatTagihan(array $req): array
 {
     $thn_akademik = trim((string) ($req['thn_akademik'] ?? ''));
@@ -2485,7 +2577,7 @@ function getBuatTagihan(array $req): array
 
     $daftar_harga = [];
     if ($kelas_id !== '') {
-        $resolvedKodeProd = $kelas_id;
+        $resolvedKodeProd = resolveKodeProdForDaftarHarga($pdo, $kelas_id, $thn_angkatan);
         $sqlDaftar = "
             SELECT
                 d.urut,
@@ -2523,42 +2615,6 @@ function getBuatTagihan(array $req): array
         $stmtDaftar = $pdo->prepare($sqlDaftar);
         $stmtDaftar->execute($paramsDaftar);
         $daftar_harga = $stmtDaftar->fetchAll();
-
-        // Bridge mapping: jika kelas_id tidak ketemu sebagai kode_prod,
-        // coba temukan kode_prod dari kode_fak (mis. kelas 3 -> kode_fak 03),
-        // lalu query final tetap pakai kode_prod.
-        if (count($daftar_harga) === 0) {
-            $kelasPad2 = str_pad((string) ((int) $kelas_id), 2, '0', STR_PAD_LEFT);
-            $sqlResolve = "
-                SELECT TRIM(kode_prod) AS kode_prod
-                FROM u_daftar_harga
-                WHERE TRIM(kode_fak) = :kelas_pad2
-            ";
-            $paramsResolve = [':kelas_pad2' => $kelasPad2];
-            if ($thn_angkatan !== '' || $thnAngkatanBase !== '') {
-                $sqlResolve .= " AND (
-                    REPLACE(TRIM(thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_full), ' ', '')
-                    OR REPLACE(TRIM(thn_masuk), ' ', '') = REPLACE(TRIM(:thn_angkatan_base_eq), ' ', '')
-                    OR REPLACE(TRIM(thn_masuk), ' ', '') LIKE CONCAT(REPLACE(TRIM(:thn_angkatan_base_like), ' ', ''), '%')
-                )";
-                $baseAngkatanResolve = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thn_angkatan;
-                $paramsResolve[':thn_angkatan_full'] = $thn_angkatan;
-                $paramsResolve[':thn_angkatan_base_eq'] = $baseAngkatanResolve;
-                $paramsResolve[':thn_angkatan_base_like'] = $baseAngkatanResolve;
-            }
-            $sqlResolve .= " ORDER BY urut ASC LIMIT 1";
-            $stmtResolve = $pdo->prepare($sqlResolve);
-            $stmtResolve->execute($paramsResolve);
-            $resolvedRow = $stmtResolve->fetch();
-            $resolvedKodeProd = trim((string) ($resolvedRow['kode_prod'] ?? ''));
-
-            if ($resolvedKodeProd !== '') {
-                $paramsDaftar[':kode_prod'] = $resolvedKodeProd;
-                $stmtDaftar = $pdo->prepare($sqlDaftar);
-                $stmtDaftar->execute($paramsDaftar);
-                $daftar_harga = $stmtDaftar->fetchAll();
-            }
-        }
 
         // Fallback terakhir: gunakan CODE01 siswa (contoh 001 -> kode_prod 1).
         if (count($daftar_harga) === 0 && count($siswa) > 0) {
@@ -2940,9 +2996,9 @@ function createTagihanExcelUpload(array $req): array
     $rows         = $req['rows'] ?? [];
     $billcdMode   = normalizeBillCdMode((string) ($req['billcd_mode'] ?? 'E'));
 
-    if ($thn_akademik === '' || $periode === '' || $kode_akun === '') {
+    if ($thn_akademik === '' || $periode === '') {
         http_response_code(422);
-        echo json_encode(['status' => 422, 'message' => 'thn_akademik, periode, dan kode_akun wajib diisi'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['status' => 422, 'message' => 'thn_akademik dan periode wajib diisi'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -2955,21 +3011,24 @@ function createTagihanExcelUpload(array $req): array
     }
 
     $pdo = dbConnectPdo();
-    $stmtAkun = $pdo->prepare("
-        SELECT TRIM(KodeAkun) AS KodeAkun, TRIM(NamaAkun) AS NamaAkun
-        FROM u_akun
-        WHERE TRIM(KodeAkun) = :kode
-        LIMIT 1
-    ");
-    $stmtAkun->execute([':kode' => $kode_akun]);
-    $akunRow = $stmtAkun->fetch();
-    if (!$akunRow) {
-        http_response_code(422);
-        echo json_encode(['status' => 422, 'message' => 'Kode akun (post) tidak ditemukan di u_akun'], JSON_UNESCAPED_UNICODE);
-        exit;
+    $akunRow = null;
+    if ($kode_akun !== '') {
+        $stmtAkun = $pdo->prepare("
+            SELECT TRIM(KodeAkun) AS KodeAkun, TRIM(NamaAkun) AS NamaAkun
+            FROM u_akun
+            WHERE TRIM(KodeAkun) = :kode
+            LIMIT 1
+        ");
+        $stmtAkun->execute([':kode' => $kode_akun]);
+        $akunRow = $stmtAkun->fetch();
+        if (!$akunRow) {
+            http_response_code(422);
+            echo json_encode(['status' => 422, 'message' => 'Kode akun (post) tidak ditemukan di u_akun'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
     }
 
-    $billnm = $tagihan !== '' ? $tagihan : trim((string) ($akunRow['NamaAkun'] ?? ''));
+    $billnm = $tagihan !== '' ? $tagihan : trim((string) ($akunRow['NamaAkun'] ?? 'Tagihan'));
 
     $stmtInsert = $pdo->prepare("
         INSERT INTO scctbill
@@ -2985,12 +3044,15 @@ function createTagihanExcelUpload(array $req): array
         LIMIT 1
     ");
     $detailCustCol = detectScctbillDetailCustColumn($pdo);
-    $stmtInsertDetail = $pdo->prepare("
-        INSERT INTO scctbill_detail
-            (AA, KodePost, BILLAM, {$detailCustCol}, FID, tahun, periode, BILLCD)
-        VALUES
-            (:AA, :KodePost, :BILLAM, :CUST_VAL, :FID, :tahun, :periode, :BILLCD)
-    ");
+    $stmtInsertDetail = null;
+    if ($kode_akun !== '') {
+        $stmtInsertDetail = $pdo->prepare("
+            INSERT INTO scctbill_detail
+                (AA, KodePost, BILLAM, {$detailCustCol}, FID, tahun, periode, BILLCD)
+            VALUES
+                (:AA, :KodePost, :BILLAM, :CUST_VAL, :FID, :tahun, :periode, :BILLCD)
+        ");
+    }
 
     $inserted = 0;
     $skipped  = 0;
@@ -3038,18 +3100,20 @@ function createTagihanExcelUpload(array $req): array
                     ':BTA'    => $thn_akademik,
                     ':FURUTAN' => $furutan,
                 ]);
-                $stmtBillAa->execute([':c' => $custid, ':b' => $billcd]);
-                $billAa = (int) ($stmtBillAa->fetchColumn() ?: 0);
-                $stmtInsertDetail->execute([
-                    ':AA' => $billAa,
-                    ':KodePost' => trim((string) $kode_akun),
-                    ':BILLAM' => $nominal,
-                    ':CUST_VAL' => $custid,
-                    ':FID' => null,
-                    ':tahun' => date('Y'),
-                    ':periode' => date('m'),
-                    ':BILLCD' => $billcd,
-                ]);
+                if ($stmtInsertDetail !== null) {
+                    $stmtBillAa->execute([':c' => $custid, ':b' => $billcd]);
+                    $billAa = (int) ($stmtBillAa->fetchColumn() ?: 0);
+                    $stmtInsertDetail->execute([
+                        ':AA' => $billAa,
+                        ':KodePost' => trim((string) $kode_akun),
+                        ':BILLAM' => $nominal,
+                        ':CUST_VAL' => $custid,
+                        ':FID' => null,
+                        ':tahun' => date('Y'),
+                        ':periode' => date('m'),
+                        ':BILLCD' => $billcd,
+                    ]);
+                }
                 $nextUrutGlobal++;
                 $inserted++;
             } catch (Throwable $e) {
@@ -5455,37 +5519,7 @@ function createBuatTagihan(array $req): array
     $pdo = dbConnectPdo();
     $thnAngkatanBase = trim((string) preg_replace('/\s*-\s*.*/', '', $thn_angkatan));
 
-    $resolvedKodeProd = $kelas_id;
-    if ($kelas_id !== '') {
-        $stmtResolveDirect = $pdo->prepare("
-            SELECT 1
-            FROM u_daftar_harga
-            WHERE TRIM(kode_prod) = :kode_prod
-            LIMIT 1
-        ");
-        $stmtResolveDirect->execute([':kode_prod' => $kelas_id]);
-        $hasDirect = (bool) $stmtResolveDirect->fetchColumn();
-
-        if (!$hasDirect) {
-            $kelasPad2 = str_pad((string) ((int) $kelas_id), 2, '0', STR_PAD_LEFT);
-            $sqlResolve = "
-                SELECT TRIM(kode_prod) AS kode_prod
-                FROM u_daftar_harga
-                WHERE TRIM(kode_fak) = :kelas_pad2
-            ";
-            $paramsResolve = [':kelas_pad2' => $kelasPad2];
-            if ($thn_angkatan !== '' || $thnAngkatanBase !== '') {
-                $sqlResolve .= " AND (TRIM(thn_masuk) = :thn_angkatan_full OR TRIM(thn_masuk) = :thn_angkatan_base)";
-                $paramsResolve[':thn_angkatan_full'] = $thn_angkatan;
-                $paramsResolve[':thn_angkatan_base'] = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thn_angkatan;
-            }
-            $sqlResolve .= " ORDER BY urut ASC LIMIT 1";
-            $stmtResolve = $pdo->prepare($sqlResolve);
-            $stmtResolve->execute($paramsResolve);
-            $rowResolve = $stmtResolve->fetch();
-            $resolvedKodeProd = trim((string) ($rowResolve['kode_prod'] ?? $kelas_id));
-        }
-    }
+    $resolvedKodeProd = resolveKodeProdForDaftarHarga($pdo, $kelas_id, $thn_angkatan);
 
     $stmtDaftarAll = $pdo->prepare("
         SELECT

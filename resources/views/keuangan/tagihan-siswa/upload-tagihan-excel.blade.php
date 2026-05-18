@@ -6,7 +6,6 @@
         $selThn = (string) ($excelMeta['thn_akademik'] ?? '');
         $selTag = (string) ($excelMeta['tagihan'] ?? '');
         $selPeriode = (string) ($excelMeta['periode'] ?? '');
-        $selPost = (string) ($excelMeta['kode_akun'] ?? '');
     @endphp
     <style>
         .eid-wrap { margin-top: 16px; }
@@ -155,7 +154,7 @@
         <div class="eid-card">
             <div class="eid-head">
                 <div class="eid-title">Upload Tagihan Excel</div>
-                <div class="eid-sub">Periode diisi otomatis dari <strong>billac</strong> (sama logika <strong>fungsi</strong> pada menu Buat Tagihan). Post diambil dari <strong>u_akun</strong>.</div>
+                <div class="eid-sub">Periode diisi otomatis dari <strong>billac</strong> (sama logika <strong>fungsi</strong> pada menu Buat Tagihan). Nominal per siswa diambil dari file excel.</div>
             </div>
 
             @if (session('status'))
@@ -191,21 +190,6 @@
                             @endphp
                             @if ($tagihanValue !== '')
                                 <option value="{{ $tagihanValue }}" {{ $selTag === $tagihanValue ? 'selected' : '' }}>{{ $tagihanValue }}</option>
-                            @endif
-                        @endforeach
-                    </select>
-                </div>
-                <div class="eid-fld">
-                    <label>Post (u_akun) <span class="eid-req">*</span></label>
-                    <select id="filter-kode-akun">
-                        <option value="">Pilih Post</option>
-                        @foreach (($akunPosts ?? []) as $a)
-                            @php
-                                $kode = (string) ($a['kodeakun'] ?? $a['KodeAkun'] ?? '');
-                                $nama = (string) ($a['namaakun'] ?? $a['NamaAkun'] ?? '');
-                            @endphp
-                            @if ($kode !== '')
-                                <option value="{{ $kode }}" {{ $selPost === $kode ? 'selected' : '' }}>{{ $kode }} — {{ $nama }}</option>
                             @endif
                         @endforeach
                     </select>
@@ -337,7 +321,7 @@
                     <li><b>Format ekspor Data Tagihan:</b> header seperti <b>NIS</b>, <b>NO DAFT</b>, <b>NO VA</b>, <b>TAGIHAN</b> (boleh <b>Rp. …</b>), dll. Jika <b>NIS</b> kosong, sistem memakai <b>NO DAFT</b> / <b>NO VA</b> (7510050…) untuk cocokkan <b>NUM2ND</b>/<b>NOCUST</b>.</li>
                 </ul>
                 <div class="eid-example">
-                    <a href="{{ asset('tagihan_excel.xlsx') }}" target="_blank" rel="noopener">Contoh file (tagihan_excel.xlsx)</a>
+                    <a href="{{ route('keu.tagihan.upload_excel.contoh') }}" target="_blank" rel="noopener">Contoh file (tagihan_excel.xlsx)</a>
                 </div>
 
                 <form method="POST" action="{{ route('keu.tagihan.upload_excel.import') }}" enctype="multipart/form-data" id="teImportForm">
@@ -345,7 +329,7 @@
                     <input type="hidden" name="thn_akademik" id="te-in-thn">
                     <input type="hidden" name="tagihan" id="te-in-tagihan">
                     <input type="hidden" name="periode" id="te-in-periode">
-                    <input type="hidden" name="kode_akun" id="te-in-kode">
+                    <input type="hidden" name="kode_akun" id="te-in-kode" value="">
                     <input type="hidden" name="raw_rows" id="te-raw-rows">
 
                     <div class="eid-file">
@@ -368,7 +352,6 @@
             const fungsiUrl = @json(route('keu.tagihan.fungsi'));
             const selThn = document.getElementById('filter-thn-akademik');
             const selTag = document.getElementById('filter-tagihan');
-            const selPost = document.getElementById('filter-kode-akun');
             const inpPeriode = document.getElementById('filter-periode');
             const btnOpen = document.getElementById('teOpenImport');
             const modal = document.getElementById('teImportModal');
@@ -459,13 +442,13 @@
             if (selTag) selTag.addEventListener('change', refreshPeriode);
 
             function filtersOk() {
-                return selThn && selThn.value && selTag && selTag.value && selPost && selPost.value && inpPeriode && inpPeriode.value.trim() !== '';
+                return selThn && selThn.value && selTag && selTag.value && inpPeriode && inpPeriode.value.trim() !== '';
             }
 
             if (btnOpen) {
                 btnOpen.addEventListener('click', function () {
                     if (!filtersOk()) {
-                        alert('Lengkapi Tahun Pelajaran, Tagihan, Post, dan tunggu Periode terisi.');
+                        alert('Lengkapi Tahun Pelajaran, Tagihan, dan tunggu Periode terisi.');
                         return;
                     }
                     modal.classList.add('open');
@@ -491,7 +474,7 @@
                     inThn.value = selThn.value;
                     inTag.value = selTag.value;
                     inPer.value = inpPeriode.value.trim();
-                    inKode.value = selPost.value;
+                    if (inKode) inKode.value = '';
                     if (!rawRowsInput.value || rawRowsInput.value === '[]') {
                         e.preventDefault();
                         alert('Pilih file excel terlebih dahulu.');
