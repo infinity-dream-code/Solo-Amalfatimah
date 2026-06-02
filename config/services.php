@@ -34,6 +34,8 @@ return [
     'ws_amal_fatimah' => [
         'url' => env('WS_AMAL_FATIMAH_URL', 'http://103.23.103.43/ws_CLIENT/amal_fatimah/index.php'),
         'jwt_key' => env('WS_AMAL_FATIMAH_JWT_KEY'),
+        /** true = pindah kelas selalu lewat DB lokal (SIKEU_DB_*), bukan WS remote */
+        'local_pindah_kelas' => (bool) env('WS_AMAL_FATIMAH_LOCAL_PINDAH_KELAS', false),
     ],
 
 ];

@@ -9,8 +9,25 @@ use Illuminate\Support\Facades\Log;
 
 class AmalFatimahApiService
 {
-    public function __construct(protected JwtService $jwt)
+    public function __construct(
+        protected JwtService $jwt,
+        protected SikeuPindahKelasService $sikeuPindahKelas,
+    ) {
+    }
+
+    protected function useLocalPindahKelas(): bool
     {
+        return (bool) config('services.ws_amal_fatimah.local_pindah_kelas', false)
+            || $this->sikeuPindahKelas->isConfigured();
+    }
+
+    protected function shouldFallbackPindahKelasWs(string $message, int $kelasSumber): bool
+    {
+        if ($kelasSumber > 0 || !$this->sikeuPindahKelas->isConfigured()) {
+            return false;
+        }
+
+        return str_contains($message, 'Kelas sumber tidak ditemukan');
     }
 
     /**
@@ -1261,29 +1278,37 @@ class AmalFatimahApiService
 
     public function getSiswaByKelas(int $kelasSumber, ?string $search = null, int $limit = 10, int $offset = 0): array
     {
+        if ($this->useLocalPindahKelas()) {
+            return $this->sikeuPindahKelas->getSiswaByKelas($kelasSumber, $search, $limit, $offset);
+        }
+
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
         $token = $this->jwt->encode(['sub' => 'getSiswaByKelas', 'rnd' => uniqid()], $jwtKey);
 
-        $body = array_filter([
+        $body = [
             'method' => 'getSiswaByKelas',
             'token' => $token,
-            'kelas_sumber' => (string) $kelasSumber,
-            'search' => $search,
             'limit' => $limit,
             'offset' => $offset,
-        ], static function ($v, $k) {
-            if (in_array($k, ['limit', 'offset'], true)) {
-                return true;
-            }
-            return !is_null($v) && $v !== '';
-        }, ARRAY_FILTER_USE_BOTH);
+        ];
+        if ($kelasSumber > 0) {
+            $body['kelas_sumber'] = (string) $kelasSumber;
+        }
+        if ($search !== null && trim($search) !== '') {
+            $body['search'] = trim($search);
+        }
 
         try {
             $response = Http::timeout(30)->post($url, $body);
             $json = $response->json();
             if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
-                return ['ok' => false, 'message' => (string) ($json['message'] ?? 'Gagal mengambil data siswa'), 'total' => 0, 'rows' => []];
+                $message = (string) ($json['message'] ?? 'Gagal mengambil data siswa');
+                if ($this->shouldFallbackPindahKelasWs($message, $kelasSumber)) {
+                    return $this->sikeuPindahKelas->getSiswaByKelas($kelasSumber, $search, $limit, $offset);
+                }
+
+                return ['ok' => false, 'message' => $message, 'total' => 0, 'rows' => []];
             }
 
             $payload = is_array($json['data'] ?? null) ? $json['data'] : [];
@@ -1315,6 +1340,10 @@ class AmalFatimahApiService
 
     public function pindahKelas(int $kelasSumber, int $kelasTujuan, string $mode, array $custids = []): array
     {
+        if ($this->useLocalPindahKelas()) {
+            return $this->sikeuPindahKelas->pindahKelas($kelasSumber, $kelasTujuan, $mode, $custids);
+        }
+
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
         $token = $this->jwt->encode(['sub' => 'pindahKelas', 'rnd' => uniqid()], $jwtKey);
@@ -1322,10 +1351,12 @@ class AmalFatimahApiService
         $body = [
             'method' => 'pindahKelas',
             'token' => $token,
-            'kelas_sumber' => (string) $kelasSumber,
             'kelas_tujuan' => (string) $kelasTujuan,
             'mode' => $mode,
         ];
+        if ($kelasSumber > 0) {
+            $body['kelas_sumber'] = (string) $kelasSumber;
+        }
         if ($mode === 'pilihan') {
             $body['custids'] = array_values(array_filter(array_map('intval', $custids), static fn ($v) => $v > 0));
         }
@@ -1336,7 +1367,12 @@ class AmalFatimahApiService
             if ($response->successful() && (int) ($json['status'] ?? 0) === 200) {
                 return ['ok' => true, 'message' => (string) ($json['message'] ?? 'Pemindahan kelas berhasil'), 'data' => $json['data'] ?? []];
             }
-            return ['ok' => false, 'message' => (string) ($json['message'] ?? 'Gagal memindahkan kelas'), 'data' => []];
+            $message = (string) ($json['message'] ?? 'Gagal memindahkan kelas');
+            if ($this->shouldFallbackPindahKelasWs($message, $kelasSumber)) {
+                return $this->sikeuPindahKelas->pindahKelas($kelasSumber, $kelasTujuan, $mode, $custids);
+            }
+
+            return ['ok' => false, 'message' => $message, 'data' => []];
         } catch (\Throwable $e) {
             Log::error('[WS Amal Fatimah] pindahKelas: ' . $e->getMessage());
             return ['ok' => false, 'message' => 'Terjadi kesalahan saat menghubungi layanan', 'data' => []];

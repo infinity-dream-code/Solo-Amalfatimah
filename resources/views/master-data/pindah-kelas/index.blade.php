@@ -25,7 +25,7 @@
 
     <div class="page-heading">
         <h2>Pindah Kelas</h2>
-        <p>Kelas asal opsional. Tanpa centang = pindah <strong>semua</strong> siswa di kelas asal (jika kelas asal dipilih); centang = hanya siswa terpilih. Tanpa kelas asal, cari NIS/nama lalu centang siswa yang akan dipindah.</p>
+        <p>Kelas asal <strong>tidak wajib</strong>. Cukup isi <strong>NIS / nama</strong> lalu Cari — kelas saat ini diambil dari data siswa (<code>scctcust</code>). Centang siswa, pilih kelas tujuan, lalu Pindah. Pindah semua hanya jika kelas asal dipilih.</p>
     </div>
 
     <div class="pk-card">
@@ -91,7 +91,7 @@
 
         <form method="POST" action="{{ route('master.pindah_kelas.store') }}" id="pkMoveForm">
             @csrf
-            <input type="hidden" name="kelas_sumber" id="pkKelasSumberHidden" value="{{ $kelasSumber ?? 0 }}">
+            <input type="hidden" name="kelas_sumber" id="pkKelasSumberHidden" value="{{ ($kelasSumber ?? 0) > 0 ? $kelasSumber : '' }}">
             <input type="hidden" name="kelas_tujuan" id="pkKelasTujuanHidden" value="{{ $kelasTujuan ?? 0 }}">
             <input type="hidden" name="search" value="{{ $search ?? '' }}">
 
@@ -116,7 +116,15 @@
                                 <td>{{ $row['nocust'] ?? '-' }}</td>
                                 <td>{{ $row['nmcust'] ?? '-' }}</td>
                                 <td>{{ $row['num2nd'] ?? '-' }}</td>
-                                <td>{{ $row['desc02'] ?? $row['code03'] ?? '-' }}</td>
+                                <td>
+                                    @php
+                                        $pkUnit = trim((string) ($row['unit_label'] ?? $row['code02'] ?? ''));
+                                        $pkKelas = trim((string) ($row['desc02'] ?? ''));
+                                        $pkKelompok = trim((string) ($row['desc03'] ?? ''));
+                                        $pkKelasLbl = implode(' — ', array_values(array_filter([$pkUnit, $pkKelas, $pkKelompok], static fn ($v) => $v !== '')));
+                                    @endphp
+                                    {{ $pkKelasLbl !== '' ? $pkKelasLbl : '-' }}
+                                </td>
                                 <td>{{ $row['desc04'] ?? '-' }}</td>
                             </tr>
                         @empty

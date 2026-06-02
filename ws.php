@@ -2136,6 +2136,9 @@ function getSiswaByKelas(array $req): array
 {
     $pdo         = dbConnectPdo();
     $kelasSumber = trim((string) ($req["kelas_sumber"] ?? ""));
+    if ($kelasSumber === "0") {
+        $kelasSumber = "";
+    }
     $search      = trim((string) ($req["search"] ?? ""));
     $kelasRow    = null;
 
@@ -2159,40 +2162,53 @@ function getSiswaByKelas(array $req): array
     $where  = ["1=1"];
     $params = [];
     if ($kelasRow) {
-        $where[]           = "TRIM(CODE03) = :CODE03";
+        $where[]           = "TRIM(c.CODE03) = :CODE03";
         $params[":CODE03"] = (string) $kelasRow["id"];
     }
     if ($search !== "") {
-        $where[]            = "(TRIM(NMCUST) LIKE :search OR TRIM(NOCUST) LIKE :search2)";
-        $params[":search"]  = "%" . $search . "%";
+        $where[] = "(
+            TRIM(c.NOCUST) = :nis_exact
+            OR TRIM(c.NUM2ND) = :nis_exact2
+            OR TRIM(c.NMCUST) LIKE :search
+            OR TRIM(c.NOCUST) LIKE :search2
+        )";
+        $params[":nis_exact"] = $search;
+        $params[":nis_exact2"] = $search;
+        $params[":search"] = "%" . $search . "%";
         $params[":search2"] = "%" . $search . "%";
     }
     $whereStr  = implode(" AND ", $where);
-    $stmtCount = $pdo->prepare("SELECT COUNT(*) AS total FROM scctcust WHERE $whereStr");
-    foreach ($params as $key => $val) $stmtCount->bindValue($key, $val, PDO::PARAM_STR);
+    $stmtCount = $pdo->prepare("SELECT COUNT(*) AS total FROM scctcust c WHERE $whereStr");
+    foreach ($params as $key => $val) {
+        $stmtCount->bindValue($key, $val, PDO::PARAM_STR);
+    }
     $stmtCount->execute();
     $totalRow = $stmtCount->fetch();
     $limit    = min((int) ($req["limit"]  ?? 50), 200);
     $offset   = max((int) ($req["offset"] ?? 0), 0);
     $sql = "
         SELECT
-            CUSTID,
-            TRIM(NOCUST) AS NOCUST,
-            TRIM(NMCUST) AS NMCUST,
-            TRIM(NUM2ND) AS NUM2ND,
-            TRIM(CODE02) AS CODE02,
-            TRIM(DESC02) AS DESC02,
-            TRIM(CODE03) AS CODE03,
-            TRIM(DESC03) AS DESC03,
-            TRIM(DESC04) AS DESC04,
-            STCUST
-        FROM scctcust
+            c.CUSTID,
+            TRIM(c.NOCUST) AS NOCUST,
+            TRIM(c.NMCUST) AS NMCUST,
+            TRIM(c.NUM2ND) AS NUM2ND,
+            TRIM(c.CODE02) AS CODE02,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit_label,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS DESC02,
+            TRIM(c.CODE03) AS CODE03,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS DESC03,
+            TRIM(c.DESC04) AS DESC04,
+            c.STCUST
+        FROM scctcust c
+        LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
         WHERE $whereStr
-        ORDER BY NMCUST ASC
+        ORDER BY c.NMCUST ASC
         LIMIT :limit OFFSET :offset
     ";
     $stmt = $pdo->prepare($sql);
-    foreach ($params as $key => $val) $stmt->bindValue($key, $val, PDO::PARAM_STR);
+    foreach ($params as $key => $val) {
+        $stmt->bindValue($key, $val, PDO::PARAM_STR);
+    }
     $stmt->bindValue(":limit",  $limit,  PDO::PARAM_INT);
     $stmt->bindValue(":offset", $offset, PDO::PARAM_INT);
     $stmt->execute();
@@ -2206,6 +2222,9 @@ function getSiswaByKelas(array $req): array
 function pindahKelas(array $req): array
 {
     $kelasSumber    = trim((string) ($req["kelas_sumber"] ?? ""));
+    if ($kelasSumber === "0") {
+        $kelasSumber = "";
+    }
     $kelasTujuan    = trim((string) ($req["kelas_tujuan"] ?? ""));
     $modePemindahan = trim((string) ($req["mode"]         ?? ""));
     if ($kelasTujuan === "") {

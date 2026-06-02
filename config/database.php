@@ -93,6 +93,25 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        /*
+         * Database SIKEU (scctcust, mst_kelas, …). Isi SIKEU_DB_* agar Pindah Kelas
+         * bisa cari siswa by NIS tanpa kelas asal walau WS remote belum di-update.
+         */
+        'sikeu' => [
+            'driver' => 'mysql',
+            'host' => env('SIKEU_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('SIKEU_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('SIKEU_DB_DATABASE', ''),
+            'username' => env('SIKEU_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('SIKEU_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
     ],
 
     /*
