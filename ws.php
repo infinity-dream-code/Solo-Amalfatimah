@@ -5513,6 +5513,22 @@ function createBuatTagihan(array $req): array
     $tagihan      = trim((string) ($req['tagihan']      ?? ''));
     $custids      = $req['custids']      ?? [];
     $kode_akuns   = $req['kode_akuns']   ?? [];
+    $nominalsMap  = [];
+    $nominalsNorm = [];
+    $nominalsRaw  = $req['nominals'] ?? [];
+    if (is_array($nominalsRaw)) {
+        foreach ($nominalsRaw as $kodeKey => $nomVal) {
+            $kodeKey = trim((string) $kodeKey);
+            if ($kodeKey === '') {
+                continue;
+            }
+            $nominalsMap[$kodeKey] = max(0, (int) $nomVal);
+            $kodeNorm = preg_replace('/\D+/', '', $kodeKey);
+            if ($kodeNorm !== '') {
+                $nominalsNorm[$kodeNorm] = $nominalsMap[$kodeKey];
+            }
+        }
+    }
 
     if ($thn_akademik === '' || $kelas_id === '') {
         http_response_code(422);
@@ -5605,6 +5621,7 @@ function createBuatTagihan(array $req): array
         'thn_angkatan_full' => $thn_angkatan,
         'thn_angkatan_base' => $thnAngkatanBase,
         'kode_akuns' => $kode_akuns,
+        'nominals_override' => $nominalsMap,
         'total_daftar_harga_all' => count($allDaftarHarga),
         'total_daftar_harga' => count($daftarHarga),
     ]);
@@ -5652,9 +5669,15 @@ function createBuatTagihan(array $req): array
 
         foreach ($custids as $custid) {
             foreach ($daftarHarga as $dh) {
-                $kodeAkun = $dh['KodeAkun'];
+                $kodeAkun = trim((string) ($dh['KodeAkun'] ?? ''));
                 $namaAkun = $dh['NamaAkun'];
                 $nominal  = (int) $dh['nominal'];
+                $kodeNorm = preg_replace('/\D+/', '', $kodeAkun);
+                if (isset($nominalsMap[$kodeAkun])) {
+                    $nominal = $nominalsMap[$kodeAkun];
+                } elseif ($kodeNorm !== '' && isset($nominalsNorm[$kodeNorm])) {
+                    $nominal = $nominalsNorm[$kodeNorm];
+                }
                 $billac   = $fungsi;
                 $furutan = $nextUrutGlobal;
                 $billcd = buildTagihanBillCd($thn_akademik, $furutan, 'M');
