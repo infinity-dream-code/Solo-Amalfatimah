@@ -79,7 +79,7 @@
                     <div class="rp-fld">
                         <label>Tanggal Transaksi</label>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                            <input type="date" name="tgl_dari" value="{{ $filters['tgl_dari'] ?? '' }}" required style="flex:1;min-width:140px;">
+                            <input type="date" name="tgl_dari" value="{{ $filters['tgl_dari'] ?? '' }}" style="flex:1;min-width:140px;">
                             <span style="color:#6b7280;font-size:12px;">s/d</span>
                             <input type="date" name="tgl_sampai" value="{{ $filters['tgl_sampai'] ?? '' }}" style="flex:1;min-width:140px;">
                         </div>

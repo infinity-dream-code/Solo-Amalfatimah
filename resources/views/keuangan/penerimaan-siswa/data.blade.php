@@ -143,7 +143,7 @@
                     </div>
                     <div class="dp-fld">
                         <label>Dari Tanggal</label>
-                        <input type="date" name="tgl_dari" value="{{ $filters['tgl_dari'] ?? '' }}" required>
+                        <input type="date" name="tgl_dari" value="{{ $filters['tgl_dari'] ?? '' }}">
                     </div>
                     <div class="dp-fld">
                         <label>Sampai Tanggal</label>
@@ -171,7 +171,7 @@
                 </div>
 
                 <ul class="dp-notes">
-                    <li>Untuk kartu siswa, isi Dari Tanggal. PDF rekap &amp; kuitansi bisa tanpa tanggal (persempit filter jika data besar).</li>
+                    <li>Filter tanggal opsional. Persempit filter lain bila data terlalu besar.</li>
                     <li>Pastikan browser anda tidak memblokir POP-UP!</li>
                 </ul>
 

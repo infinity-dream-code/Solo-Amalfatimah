@@ -3724,7 +3724,7 @@ function getDataPenerimaan(array $req): array
 }
 
 /**
- * Kartu siswa dari konteks Data Penerimaan: data siswa (scctcust GENUS/GENUS1) + baris penerimaan (lunas) per filter + custid terpilih.
+ * Kartu siswa dari konteks Data Penerimaan: data siswa (scctcust GENUS) + baris penerimaan (lunas) per filter + custid terpilih.
  * No VA = 7510050 + digit NOCUST.
  */
 function getKartuSiswaPenerimaan(array $req): array
@@ -3866,8 +3866,7 @@ function getKartuSiswaPenerimaan(array $req): array
             TRIM(DESC02) AS DESC02,
             TRIM(DESC03) AS DESC03,
             TRIM(DESC04) AS DESC04,
-            TRIM(GENUS) AS GENUS,
-            TRIM(GENUS1) AS GENUS1
+            TRIM(GENUS) AS GENUS
         FROM scctcust
         WHERE CUSTID IN (" . implode(',', $inS) . ")
     ";
@@ -3904,7 +3903,7 @@ function getKartuSiswaPenerimaan(array $req): array
             'angkatan' => trim((string) ($s['DESC04'] ?? '')),
             'kelompok' => trim((string) ($s['DESC03'] ?? '')),
             'ayah'     => trim((string) ($s['GENUS'] ?? '')),
-            'ibu'      => trim((string) ($s['GENUS1'] ?? '')),
+            'ibu'      => trim((string) ($s['GENUS'] ?? '')),
             'items'    => [],
             'total'    => 0,
         ];

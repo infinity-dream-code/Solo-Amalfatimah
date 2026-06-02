@@ -139,7 +139,7 @@ class PenerimaanSiswaController extends Controller
     }
 
     /**
-     * Cetak kartu siswa (PDF) — siswa dipilih di grid; Ayah/Ibu dari scctcust (GENUS/GENUS1) via WS.
+     * Cetak kartu siswa (PDF) — siswa dipilih di grid; Ayah/Ibu dari scctcust (GENUS) via WS.
      */
     public function printKartuSiswa(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {
@@ -153,9 +153,6 @@ class PenerimaanSiswaController extends Controller
         }
 
         $filters = $this->penerimaanFiltersFromPost($request);
-        if ($filters['tgl_dari'] === '') {
-            return redirect()->back()->with('export_error', 'Isi Tanggal Transaksi (Dari Tanggal) sebelum cetak kartu.');
-        }
 
         $res = $api->getKartuSiswaPenerimaan($filters, $custids);
         if (!$res['ok']) {
