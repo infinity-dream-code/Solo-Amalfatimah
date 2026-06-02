@@ -15,6 +15,7 @@
         .bt-money{display:flex;align-items:center;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;min-width:180px;background:#fff}
         .bt-money-prefix{background:#f3f4f6;color:#374151;padding:7px 10px;font-size:12px;border-right:1px solid #d1d5db}
         .bt-money-value{padding:0 10px;font-size:13px;color:#111827}
+        .bt-money-input{border:0;outline:none;width:100%;min-width:120px;height:32px;padding:0 10px;font-size:13px;text-align:right;background:transparent}
         .bt-wrap{overflow:auto;margin-top:8px}
         .bt-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
         .bt-pg{display:flex;gap:6px}.bt-page{min-width:30px;height:30px;border:1px solid #d1d5db;border-radius:999px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#4b5563;font-size:12px;font-weight:700;background:#fff}
@@ -185,7 +186,10 @@
                     <thead><tr><th><input type="checkbox" id="check-all-akun"></th><th>KODE</th><th>NAMA AKUN</th><th>NOMINAL</th></tr></thead>
                     <tbody id="akun-tbody">
                         @forelse (($daftarHargaRows ?? []) as $row)
-                            @php $kode = (string)($row['KodeAkun'] ?? $row['kodeakun'] ?? ''); @endphp
+                            @php
+                                $kode = (string)($row['KodeAkun'] ?? $row['kodeakun'] ?? '');
+                                $nom = (int) ($row['nominal'] ?? 0);
+                            @endphp
                             <tr>
                                 <td><input type="checkbox" class="check-akun" name="kode_akuns[]" value="{{ $kode }}"></td>
                                 <td>{{ $kode !== '' ? $kode : '-' }}</td>
@@ -193,7 +197,7 @@
                                 <td>
                                     <div class="bt-money">
                                         <span class="bt-money-prefix">Rp</span>
-                                        <span class="bt-money-value">{{ number_format((int) ($row['nominal'] ?? 0), 0, ',', '.') }}</span>
+                                        <input type="number" class="bt-money-input nominal-akun" name="nominals[{{ $kode }}]" value="{{ $nom }}" min="0" step="1" data-kode="{{ $kode }}">
                                     </div>
                                 </td>
                             </tr>
@@ -292,8 +296,7 @@
                 akunTbody.innerHTML = rows.map((row) => {
                     const kode = String(row.KodeAkun ?? row.kodeakun ?? '');
                     const nama = String(row.NamaAkun ?? row.namaakun ?? '-');
-                    const nominalNum = Number(row.nominal ?? 0);
-                    const nominal = nominalNum.toLocaleString('id-ID');
+                    const nominalNum = Math.max(0, Number(row.nominal ?? 0));
                     return `<tr>
                         <td><input type="checkbox" class="check-akun" name="kode_akuns[]" value="${kode}"></td>
                         <td>${kode || '-'}</td>
@@ -301,7 +304,7 @@
                         <td>
                             <div class="bt-money">
                                 <span class="bt-money-prefix">Rp</span>
-                                <span class="bt-money-value">${nominal}</span>
+                                <input type="number" class="bt-money-input nominal-akun" name="nominals[${kode}]" value="${nominalNum}" min="0" step="1" data-kode="${kode}">
                             </div>
                         </td>
                     </tr>`;
@@ -449,6 +452,19 @@
                         alert('Pilih minimal satu kode tagihan.');
                         return;
                     }
+                    const selectedKodes = new Set(selectedAkun.map((el) => (el.value || '').trim()));
+                    document.querySelectorAll('.nominal-akun').forEach((inp) => {
+                        const kode = (inp.dataset.kode || inp.name.replace(/^nominals\[(.*)\]$/, '$1') || '').trim();
+                        if (!selectedKodes.has(kode)) {
+                            inp.disabled = true;
+                            inp.removeAttribute('name');
+                        } else {
+                            inp.disabled = false;
+                            if (!inp.getAttribute('name')) {
+                                inp.setAttribute('name', 'nominals[' + kode + ']');
+                            }
+                        }
+                    });
                     if (!hiddenAkademik?.value) {
                         e.preventDefault();
                         alert('Tahun Pelajaran wajib diisi.');

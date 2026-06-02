@@ -1453,6 +1453,7 @@ class AmalFatimahApiService
             'tagihan' => trim((string) ($payload['tagihan'] ?? '')),
             'custids' => array_values(array_filter(array_map('intval', (array) ($payload['custids'] ?? [])), static fn ($v) => $v > 0)),
             'kode_akuns' => array_values(array_filter(array_map('strval', (array) ($payload['kode_akuns'] ?? [])), static fn ($v) => trim($v) !== '')),
+            'nominals' => is_array($payload['nominals'] ?? null) ? $payload['nominals'] : [],
         ];
 
         try {

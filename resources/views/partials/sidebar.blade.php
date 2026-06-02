@@ -48,7 +48,6 @@
             </div>
 
             <a href="{{ route('keu.manual') }}" class="{{ request()->routeIs('keu.manual') ? 'active' : '' }}">Manual Pembayaran</a>
-            <a href="{{ route('keu.manual_nis') }}" class="{{ request()->routeIs('keu.manual_nis') ? 'active' : '' }}">Manual Pembayaran NIS</a>
 
             <button type="button" class="sidebar-item has-children {{ request()->routeIs('keu.penerimaan.*') ? 'open' : '' }}" id="penerimaanSiswaToggle" onclick="togglePenerimaanSiswa()">
                 Penerimaan Siswa

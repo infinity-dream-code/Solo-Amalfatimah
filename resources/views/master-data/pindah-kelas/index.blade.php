@@ -25,7 +25,7 @@
 
     <div class="page-heading">
         <h2>Pindah Kelas</h2>
-        <p>Tanpa centang = pindah <strong>semua</strong> siswa di kelas asal; centang satu atau lebih = hanya siswa terpilih.</p>
+        <p>Kelas asal opsional. Tanpa centang = pindah <strong>semua</strong> siswa di kelas asal (jika kelas asal dipilih); centang = hanya siswa terpilih. Tanpa kelas asal, cari NIS/nama lalu centang siswa yang akan dipindah.</p>
     </div>
 
     <div class="pk-card">
@@ -38,7 +38,7 @@
             <div class="pk-row">
                 <div class="pk-fld">
                     <label>Kelas Asal</label>
-                    <select name="kelas_sumber" id="pkKelasSumber" required>
+                    <select name="kelas_sumber" id="pkKelasSumber">
                         <option value="">Pilih kelas asal</option>
                         @foreach (($kelasRows ?? []) as $k)
                             @php

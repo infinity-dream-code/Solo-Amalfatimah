@@ -161,6 +161,8 @@ class TagihanSiswaController extends Controller
             'custids.*' => ['integer', 'min:1'],
             'kode_akuns' => ['required', 'array', 'min:1'],
             'kode_akuns.*' => ['string'],
+            'nominals' => ['nullable', 'array'],
+            'nominals.*' => ['nullable', 'integer', 'min:0'],
         ], [
             'thn_akademik.required' => 'Tahun Pelajaran wajib diisi.',
             'kelas_id.required' => 'Kelas wajib diisi.',

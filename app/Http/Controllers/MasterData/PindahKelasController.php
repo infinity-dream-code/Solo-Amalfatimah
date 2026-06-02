@@ -26,7 +26,7 @@ class PindahKelasController extends Controller
         $error = '';
         if ($kelasSumber > 0 && $kelasTujuan > 0 && $kelasSumber === $kelasTujuan) {
             $error = 'Kelas asal dan kelas tujuan tidak boleh sama.';
-        } elseif ($kelasSumber > 0) {
+        } elseif ($kelasSumber > 0 || $search !== '') {
             $res = $api->getSiswaByKelas($kelasSumber, $search !== '' ? $search : null, $perPage, $offset);
             if ($res['ok']) {
                 $siswaRows = $res['rows'];
@@ -63,22 +63,31 @@ class PindahKelasController extends Controller
     public function store(Request $request, AmalFatimahApiService $api): RedirectResponse
     {
         $validated = $request->validate([
-            'kelas_sumber' => ['required', 'integer', 'min:1'],
-            'kelas_tujuan' => ['required', 'integer', 'min:1', 'different:kelas_sumber'],
+            'kelas_sumber' => ['nullable', 'integer', 'min:0'],
+            'kelas_tujuan' => ['required', 'integer', 'min:1'],
             'custids' => ['nullable', 'array'],
             'custids.*' => ['integer', 'min:1'],
             'search' => ['nullable', 'string'],
-        ], [
-            'kelas_tujuan.different' => 'Kelas asal dan kelas tujuan tidak boleh sama.',
         ]);
 
         $custids = array_values(array_unique(array_filter(
             array_map('intval', (array) ($validated['custids'] ?? [])),
             static fn (int $v): bool => $v > 0
         )));
-        $mode = count($custids) > 0 ? 'pilihan' : 'semua';
+        $kelasSumber = (int) ($validated['kelas_sumber'] ?? 0);
+        $kelasTujuan = (int) $validated['kelas_tujuan'];
+        if ($kelasSumber > 0 && $kelasSumber === $kelasTujuan) {
+            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
+                ->with('error', 'Kelas asal dan kelas tujuan tidak boleh sama.');
+        }
 
-        $res = $api->pindahKelas((int) $validated['kelas_sumber'], (int) $validated['kelas_tujuan'], $mode, $custids);
+        $mode = count($custids) > 0 ? 'pilihan' : 'semua';
+        if ($mode === 'semua' && $kelasSumber <= 0) {
+            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
+                ->with('error', 'Pindah semua siswa membutuhkan kelas asal. Atau centang siswa yang akan dipindah.');
+        }
+
+        $res = $api->pindahKelas($kelasSumber, $kelasTujuan, $mode, $custids);
         if (!$res['ok']) {
             return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))->with('error', $res['message']);
         }
