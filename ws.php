@@ -2139,8 +2139,8 @@ function getSiswaByKelas(array $req): array
     if ($kelasSumber === "0") {
         $kelasSumber = "";
     }
-    $search      = trim((string) ($req["search"] ?? ""));
-    $kelasRow    = null;
+    $search   = trim((string) ($req["search"] ?? ""));
+    $kelasRow = null;
 
     if ($kelasSumber !== "") {
         $stmtKelas = $pdo->prepare("SELECT id, kelas, unit, kelompok, jenjang FROM mst_kelas WHERE id = :id");
@@ -5401,161 +5401,6 @@ function createManualPembayaran(array $req): array
     ];
 }
 
-/**
- * WHERE + params untuk halaman Data Tagihan (semua tagihan FSTSBolehBayar = 1).
- *
- * @return array{0: list<string>, 1: array<string, mixed>}
- */
-function dataTagihanBuildWhereFromReq(array $req): array
-{
-    $where = ['b.FSTSBolehBayar = 1'];
-    $params = [];
-
-    $tglDari = trim((string) ($req['tgl_dari'] ?? ''));
-    $tglSampai = trim((string) ($req['tgl_sampai'] ?? ''));
-    $thnAngkatan = trim((string) ($req['thn_angkatan'] ?? ''));
-    $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
-    $kelasId = trim((string) ($req['kelas_id'] ?? ''));
-    $namaTagihan = trim((string) ($req['nama_tagihan'] ?? ''));
-    $siswa = trim((string) ($req['siswa'] ?? ''));
-    $thnAngkatanBase = trim((string) preg_replace('/\s*-\s*.*/', '', $thnAngkatan));
-
-    if ($tglDari !== '' && $tglSampai !== '') {
-        $where[] = 'DATE(b.FTGLTagihan) BETWEEN :dt_tgl_dari AND :dt_tgl_sampai';
-        $params[':dt_tgl_dari'] = $tglDari;
-        $params[':dt_tgl_sampai'] = $tglSampai;
-    } elseif ($tglDari !== '') {
-        $where[] = 'DATE(b.FTGLTagihan) >= :dt_tgl_dari';
-        $params[':dt_tgl_dari'] = $tglDari;
-    } elseif ($tglSampai !== '') {
-        $where[] = 'DATE(b.FTGLTagihan) <= :dt_tgl_sampai';
-        $params[':dt_tgl_sampai'] = $tglSampai;
-    }
-
-    if ($thnAngkatan !== '') {
-        $where[] = '(TRIM(c.DESC04) = :dt_thn_ang OR TRIM(c.DESC04) = :dt_thn_ang_base)';
-        $params[':dt_thn_ang'] = $thnAngkatan;
-        $params[':dt_thn_ang_base'] = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thnAngkatan;
-    }
-    if ($thnAkademik !== '') {
-        $where[] = '(
-            UPPER(TRIM(b.BTA)) = UPPER(TRIM(:dt_bta))
-            OR UPPER(TRIM(b.BTA)) LIKE CONCAT(UPPER(TRIM(:dt_bta_like)), "%")
-            OR LEFT(TRIM(b.BTA), 4) = LEFT(TRIM(:dt_bta_yr), 4)
-        )';
-        $params[':dt_bta'] = $thnAkademik;
-        $params[':dt_bta_like'] = $thnAkademik;
-        $params[':dt_bta_yr'] = $thnAkademik;
-    }
-    if ($kelasId !== '') {
-        $where[] = 'TRIM(c.CODE03) = :dt_kelas_id';
-        $params[':dt_kelas_id'] = $kelasId;
-    }
-    if ($namaTagihan !== '') {
-        $where[] = 'UPPER(TRIM(b.BILLNM)) = UPPER(TRIM(:dt_billnm))';
-        $params[':dt_billnm'] = $namaTagihan;
-    }
-    if ($siswa !== '') {
-        $where[] = '(
-            TRIM(c.NOCUST) LIKE :dt_sw
-            OR TRIM(c.NUM2ND) LIKE :dt_sw2
-            OR TRIM(c.NMCUST) LIKE :dt_sw3
-            OR TRIM(b.BILLNM) LIKE :dt_sw4
-        )';
-        $like = '%' . $siswa . '%';
-        $params[':dt_sw'] = $like;
-        $params[':dt_sw2'] = $like;
-        $params[':dt_sw3'] = $like;
-        $params[':dt_sw4'] = $like;
-    }
-
-    return [$where, $params];
-}
-
-/**
- * Data tagihan siswa untuk halaman Data Tagihan (lunas + belum lunas).
- *
- * @return array{rows: list<array<string, mixed>>, total: int}
- */
-function getDataTagihan(array $req): array
-{
-    $pdo = dbConnectPdo();
-    $limit = min(100, max(1, (int) ($req['limit'] ?? 25)));
-    $offset = max(0, (int) ($req['offset'] ?? 0));
-    $sortUrutan = strtolower(trim((string) ($req['sort_urutan'] ?? 'asc')));
-    $orderDir = $sortUrutan === 'desc' ? 'DESC' : 'ASC';
-
-    [$where, $params] = dataTagihanBuildWhereFromReq($req);
-    $whereSql = implode(' AND ', $where);
-
-    $countSql = "
-        SELECT COUNT(*) AS total
-        FROM scctbill b
-        INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
-        WHERE {$whereSql}
-    ";
-    $stmtCount = $pdo->prepare($countSql);
-    foreach ($params as $k => $v) {
-        $stmtCount->bindValue($k, (string) $v, PDO::PARAM_STR);
-    }
-    $stmtCount->execute();
-    $total = (int) ($stmtCount->fetchColumn() ?: 0);
-
-    $orderSql = "COALESCE(b.furutan, 0) {$orderDir}, b.FTGLTagihan DESC, b.CUSTID DESC, b.BILLCD DESC";
-    $sql = "
-        SELECT
-            b.CUSTID AS custid,
-            TRIM(b.BILLCD) AS billcd,
-            TRIM(c.NOCUST) AS nis,
-            TRIM(c.NUM2ND) AS no_daftar,
-            TRIM(c.NMCUST) AS nama,
-            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
-            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
-            TRIM(b.BILLNM) AS nama_tagihan,
-            CAST(COALESCE(b.BILLAM, 0) AS SIGNED) AS tagihan,
-            TRIM(b.BTA) AS tahun_aka,
-            COALESCE(b.furutan, 0) AS furutan,
-            TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
-        FROM scctbill b
-        INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
-        LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
-        WHERE {$whereSql}
-        ORDER BY {$orderSql}
-        LIMIT " . (int) $limit . " OFFSET " . (int) $offset;
-
-    $stmt = $pdo->prepare($sql);
-    foreach ($params as $k => $v) {
-        $stmt->bindValue($k, (string) $v, PDO::PARAM_STR);
-    }
-    $stmt->execute();
-    $raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $rows = [];
-    foreach ($raw as $r) {
-        $nis = trim((string) ($r['nis'] ?? ''));
-        $digits = preg_replace('/\D+/', '', $nis);
-        $rows[] = [
-            'custid' => (int) ($r['custid'] ?? 0),
-            'billcd' => trim((string) ($r['billcd'] ?? '')),
-            'nis' => $nis,
-            'no_daftar' => trim((string) ($r['no_daftar'] ?? '')),
-            'no_va' => '7510050' . ($digits !== '' ? $digits : '0'),
-            'nama' => trim((string) ($r['nama'] ?? '')),
-            'unit' => trim((string) ($r['unit'] ?? '')),
-            'kelas' => trim((string) ($r['kelas'] ?? '')),
-            'kelompok' => trim((string) ($r['kelompok'] ?? '')),
-            'nama_tagihan' => trim((string) ($r['nama_tagihan'] ?? '')),
-            'tagihan' => (int) ($r['tagihan'] ?? 0),
-            'tahun_aka' => trim((string) ($r['tahun_aka'] ?? '')),
-            'furutan' => (int) ($r['furutan'] ?? 0),
-            'paidst' => trim((string) ($r['paidst'] ?? '0')),
-        ];
-    }
-
-    return ['rows' => $rows, 'total' => $total];
-}
-
 function updateDataTagihanUrutan(array $req): array
 {
     $custid    = (int) ($req['custid'] ?? 0);
@@ -5668,7 +5513,6 @@ function createBuatTagihan(array $req): array
     $tagihan      = trim((string) ($req['tagihan']      ?? ''));
     $custids      = $req['custids']      ?? [];
     $kode_akuns   = $req['kode_akuns']   ?? [];
-    $nominalMap   = is_array($req['nominals'] ?? null) ? $req['nominals'] : [];
 
     if ($thn_akademik === '' || $kelas_id === '') {
         http_response_code(422);
@@ -5809,27 +5653,9 @@ function createBuatTagihan(array $req): array
 
         foreach ($custids as $custid) {
             foreach ($daftarHarga as $dh) {
-                $kodeAkun = trim((string) ($dh['KodeAkun'] ?? ''));
+                $kodeAkun = $dh['KodeAkun'];
                 $namaAkun = $dh['NamaAkun'];
-                $nominalDefault = (int) ($dh['nominal'] ?? 0);
-                $nominalOverride = null;
-                if ($kodeAkun !== '' && array_key_exists($kodeAkun, $nominalMap)) {
-                    $nominalOverride = (int) $nominalMap[$kodeAkun];
-                }
-                if ($nominalOverride === null) {
-                    $kodeNorm = preg_replace('/\D+/', '', $kodeAkun);
-                    foreach ($nominalMap as $mapKey => $mapVal) {
-                        if (preg_replace('/\D+/', '', (string) $mapKey) === $kodeNorm && $kodeNorm !== '') {
-                            $nominalOverride = (int) $mapVal;
-                            break;
-                        }
-                    }
-                }
-                $nominal = $nominalOverride !== null ? max(0, $nominalOverride) : $nominalDefault;
-                if ($nominal <= 0) {
-                    $errors[] = ['custid' => $custid, 'kode_akun' => $kodeAkun, 'error' => 'Nominal harus lebih dari 0'];
-                    continue;
-                }
+                $nominal  = (int) $dh['nominal'];
                 $billac   = $fungsi;
                 $furutan = $nextUrutGlobal;
                 $billcd = buildTagihanBillCd($thn_akademik, $furutan, 'M');

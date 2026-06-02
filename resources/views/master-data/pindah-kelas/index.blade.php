@@ -25,7 +25,6 @@
 
     <div class="page-heading">
         <h2>Pindah Kelas</h2>
-        <p>Kelas asal <strong>tidak wajib</strong>. Cukup isi <strong>NIS / nama</strong> lalu Cari — kelas saat ini diambil dari data siswa (<code>scctcust</code>). Centang siswa, pilih kelas tujuan, lalu Pindah. Pindah semua hanya jika kelas asal dipilih.</p>
     </div>
 
     <div class="pk-card">
