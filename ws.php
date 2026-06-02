@@ -3356,6 +3356,165 @@ function penerimaanBuildPenerimaanFiltersFromReq(array $req): array
 }
 
 /**
+ * Data tagihan (belum & sudah lunas) untuk halaman Data Tagihan.
+ *
+ * @return array{rows: array<int, array<string, mixed>>, total: int}
+ */
+function getDataTagihan(array $req): array
+{
+    $pdo = dbConnectPdo();
+
+    $tglDari = trim((string) ($req['tgl_dari'] ?? ''));
+    $tglSampai = trim((string) ($req['tgl_sampai'] ?? ''));
+    $thnAngkatan = trim((string) ($req['thn_angkatan'] ?? ''));
+    $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
+    $kelasId = trim((string) ($req['kelas_id'] ?? ''));
+    $namaTagihan = trim((string) ($req['nama_tagihan'] ?? ''));
+    $siswa = trim((string) ($req['siswa'] ?? ''));
+    $sortUrutan = strtolower(trim((string) ($req['sort_urutan'] ?? 'asc')));
+    if (!in_array($sortUrutan, ['asc', 'desc'], true)) {
+        $sortUrutan = 'asc';
+    }
+
+    $thnAngkatanBase = trim((string) preg_replace('/\s*-\s*.*/', '', $thnAngkatan));
+
+    $where = ['b.FSTSBolehBayar = 1'];
+    $params = [];
+
+    $dDari = penerimaanParseYmd($tglDari);
+    $dSampai = penerimaanParseYmd($tglSampai);
+    if ($tglDari !== '' && $tglSampai !== '' && $dDari && $dSampai) {
+        $where[] = 'b.FTGLTagihan >= :tg_start AND b.FTGLTagihan < :tg_end_excl';
+        $params[':tg_start'] = $dDari->format('Y-m-d H:i:s');
+        $params[':tg_end_excl'] = $dSampai->modify('+1 day')->format('Y-m-d H:i:s');
+    } elseif ($tglDari !== '' && $dDari) {
+        $where[] = 'b.FTGLTagihan >= :tg_start';
+        $params[':tg_start'] = $dDari->format('Y-m-d H:i:s');
+    } elseif ($tglSampai !== '' && $dSampai) {
+        $where[] = 'b.FTGLTagihan < :tg_end_excl';
+        $params[':tg_end_excl'] = $dSampai->modify('+1 day')->format('Y-m-d H:i:s');
+    } elseif ($tglDari !== '' && $tglSampai !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) BETWEEN :tg_dari AND :tg_sampai';
+        $params[':tg_dari'] = $tglDari;
+        $params[':tg_sampai'] = $tglSampai;
+    } elseif ($tglDari !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) >= :tg_dari';
+        $params[':tg_dari'] = $tglDari;
+    } elseif ($tglSampai !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) <= :tg_sampai';
+        $params[':tg_sampai'] = $tglSampai;
+    }
+
+    if ($thnAkademik !== '') {
+        $where[] = '(
+            UPPER(TRIM(b.BTA)) = UPPER(TRIM(:bta))
+            OR UPPER(TRIM(b.BTA)) LIKE CONCAT(UPPER(TRIM(:bta_like)), "%")
+            OR LEFT(TRIM(b.BTA), 4) = LEFT(TRIM(:bta_yr), 4)
+        )';
+        $params[':bta'] = $thnAkademik;
+        $params[':bta_like'] = $thnAkademik;
+        $params[':bta_yr'] = $thnAkademik;
+    }
+
+    if ($namaTagihan !== '') {
+        $where[] = 'UPPER(TRIM(b.BILLNM)) = UPPER(TRIM(:billnm))';
+        $params[':billnm'] = $namaTagihan;
+    }
+
+    if ($thnAngkatan !== '') {
+        $where[] = '(TRIM(c.DESC04) = :thn_ang OR TRIM(c.DESC04) = :thn_ang_base)';
+        $params[':thn_ang'] = $thnAngkatan;
+        $params[':thn_ang_base'] = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thnAngkatan;
+    }
+
+    if ($kelasId !== '') {
+        $where[] = 'TRIM(c.CODE03) = :kelas_id';
+        $params[':kelas_id'] = $kelasId;
+    }
+
+    if ($siswa !== '') {
+        $sLike = '%' . $siswa . '%';
+        $where[] = '(
+            TRIM(c.NOCUST) LIKE :siswa_nis
+            OR TRIM(c.NUM2ND) LIKE :siswa_daftar
+            OR TRIM(c.NMCUST) LIKE :siswa_nama
+        )';
+        $params[':siswa_nis'] = $sLike;
+        $params[':siswa_daftar'] = $sLike;
+        $params[':siswa_nama'] = $sLike;
+    }
+
+    $whereSql = implode(' AND ', $where);
+
+    $limit = min(max((int) ($req['limit'] ?? 10), 1), 200);
+    $offset = max((int) ($req['offset'] ?? 0), 0);
+    $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
+    $sqlLimit = $includeTotal ? $limit : min(200, $limit + 1);
+
+    $sql = "
+        SELECT
+            b.CUSTID AS custid,
+            TRIM(b.BILLCD) AS billcd,
+            TRIM(c.NOCUST) AS nis,
+            TRIM(c.NUM2ND) AS no_daftar,
+            CONCAT('7510050', COALESCE(NULLIF(TRIM(c.NOCUST), ''), '0')) AS no_va,
+            TRIM(c.NMCUST) AS nama,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
+            TRIM(b.BILLNM) AS nama_tagihan,
+            COALESCE(b.BILLAM, 0) AS tagihan,
+            TRIM(b.BTA) AS tahun_aka,
+            COALESCE(b.furutan, 0) AS furutan,
+            TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
+        FROM scctbill b
+        JOIN scctcust c ON c.CUSTID = b.CUSTID
+        LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
+        WHERE {$whereSql}
+        ORDER BY COALESCE(b.furutan, 0) {$sortUrutan}, b.CUSTID ASC, b.BILLCD ASC
+        LIMIT :limit OFFSET :offset
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $k => $v) {
+        $stmt->bindValue($k, $v, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $sqlLimit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $hasMore = false;
+    if (!$includeTotal && count($rows) > $limit) {
+        array_pop($rows);
+        $hasMore = true;
+    }
+
+    $total = 0;
+    if ($includeTotal) {
+        $stmtCount = $pdo->prepare("
+            SELECT COUNT(*) AS total
+            FROM scctbill b
+            JOIN scctcust c ON c.CUSTID = b.CUSTID
+            WHERE {$whereSql}
+        ");
+        foreach ($params as $k => $v) {
+            $stmtCount->bindValue($k, $v, PDO::PARAM_STR);
+        }
+        $stmtCount->execute();
+        $total = (int) ($stmtCount->fetchColumn() ?: 0);
+    } else {
+        // Total aproksimasi untuk paginator ringan: cukup tahu apakah ada halaman berikutnya.
+        $total = $offset + count($rows) + ($hasMore ? 1 : 0);
+    }
+
+    return [
+        'rows' => $rows,
+        'total' => $total,
+    ];
+}
+
+/**
  * Data penerimaan (tagihan lunas) untuk halaman Data Penerimaan.
  * Pagination: LIMIT/OFFSET; urutan: AA DESC bila kolom AA ada di scctbill, else PAIDDT DESC.
  * include_total=0: tanpa COUNT(*) (hemat waktu pada dataset besar); ambil limit+1 baris agar client tahu ada halaman berikutnya.

@@ -1662,6 +1662,7 @@ class AmalFatimahApiService
             'token' => $token,
             'limit' => $limit,
             'offset' => $offset,
+            'include_total' => 0,
         ], array_filter([
             'tgl_dari' => trim((string) ($filters['tgl_dari'] ?? '')),
             'tgl_sampai' => trim((string) ($filters['tgl_sampai'] ?? '')),
