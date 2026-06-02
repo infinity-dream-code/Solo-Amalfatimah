@@ -5559,7 +5559,6 @@ function createBuatTagihan(array $req): array
     $stmtDaftarAll = $pdo->prepare("
         SELECT
             TRIM(KodeAkun) AS KodeAkun,
-            COALESCE(fid, 1) AS FID,
             COALESCE(
                 NULLIF(TRIM(NamaAkun), ''),
                 (
