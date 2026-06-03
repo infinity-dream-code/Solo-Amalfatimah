@@ -1657,7 +1657,8 @@ class AmalFatimahApiService
         int $limit,
         int $offset,
         bool $forExport = false,
-        array $custids = []
+        array $custids = [],
+        bool $rekapCetak = false
     ): array {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -1681,6 +1682,9 @@ class AmalFatimahApiService
             'sort_urutan' => trim((string) ($filters['sort_urutan'] ?? '')),
         ], static fn ($v) => $v !== ''));
 
+        if ($rekapCetak) {
+            $body['rekap_cetak'] = 1;
+        }
         $custidNums = [];
         foreach ($custids as $v) {
             $n = (int) $v;
@@ -1692,7 +1696,7 @@ class AmalFatimahApiService
             $body['custids'] = array_values(array_unique($custidNums));
         }
 
-        $timeout = $forExport ? 120 : 45;
+        $timeout = ($forExport || $rekapCetak) ? 180 : 45;
 
         try {
             $response = Http::timeout($timeout)->post($url, $body);
@@ -1737,12 +1741,12 @@ class AmalFatimahApiService
     }
 
     /**
-     * Satu panggilan WS untuk cetak rekap tagihan (semua baris sesuai filter, maks 5000).
+     * Satu panggilan WS untuk cetak rekap tagihan PDF (maks 3000 baris).
      *
      * @param array<string, mixed> $filters
      * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>}}
      */
-    public function getTagihanRekapCetak(array $filters, int $maxRows = 5000): array
+    public function getTagihanRekapCetak(array $filters, int $maxRows = 3000): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -1751,7 +1755,7 @@ class AmalFatimahApiService
         $body = array_merge([
             'method' => 'getTagihanRekapCetak',
             'token' => $token,
-            'limit' => min(max($maxRows, 1), 5000),
+            'limit' => min(max($maxRows, 1), 50000),
         ], array_filter([
             'tgl_dari' => trim((string) ($filters['tgl_dari'] ?? '')),
             'tgl_sampai' => trim((string) ($filters['tgl_sampai'] ?? '')),

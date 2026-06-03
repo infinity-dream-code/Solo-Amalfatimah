@@ -17,6 +17,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TagihanSiswaController extends Controller
 {
+    private const REKAP_PDF_MAX_ROWS = 3000;
+
+    private const REKAP_EXPORT_MAX_ROWS = 50000;
+
+    private const REKAP_EXPORT_CHUNK = 5000;
+
     public function fungsi(Request $request, AmalFatimahApiService $api): JsonResponse
     {
         $thnAkademik = trim((string) $request->query('thn_akademik', ''));
@@ -919,7 +925,7 @@ XML);
         return $pdf->stream('kartu-siswa-' . date('Ymd-His') . '.pdf');
     }
 
-    public function dataPrintRekap(Request $request, AmalFatimahApiService $api): \Illuminate\Http\Response|RedirectResponse
+    public function dataPrintRekap(Request $request, AmalFatimahApiService $api): StreamedResponse|\Illuminate\Http\Response|RedirectResponse
     {
         $hasSearchContext = trim((string) $request->input('has_search_context', '')) === '1';
         if (!$hasSearchContext) {
@@ -927,13 +933,31 @@ XML);
         }
 
         $filters = $this->validatedDataTagihanFiltersFromRequest($request);
+        $format = strtolower(trim((string) $request->input('format', 'auto')));
+        $approxTotal = max(0, (int) $request->input('rekap_total', 0));
 
-        $rawRows = $this->fetchTagihanRowsForRekapCetak($api, $filters);
+        if ($format === 'auto') {
+            $format = ($approxTotal > self::REKAP_PDF_MAX_ROWS) ? 'csv' : 'pdf';
+        }
+
+        if ($format === 'csv' || $format === 'excel') {
+            return $this->streamRekapTagihanCsv($api, $filters);
+        }
+
+        set_time_limit(120);
+
+        $rawRows = $this->fetchTagihanRowsForRekapCetak($api, $filters, self::REKAP_PDF_MAX_ROWS);
         if ($rawRows === null) {
             return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
         }
         if ($rawRows === []) {
             return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk cetak rekap.');
+        }
+        if (count($rawRows) >= self::REKAP_PDF_MAX_ROWS) {
+            return redirect()->back()->with(
+                'export_error',
+                'Data lebih dari ' . number_format(self::REKAP_PDF_MAX_ROWS, 0, ',', '.') . ' baris. Gunakan Export Rekap (CSV) untuk dataset besar.'
+            );
         }
 
         $rows = [];
@@ -958,6 +982,91 @@ XML);
         ])->setPaper('a4', 'portrait');
 
         return $pdf->stream('rekap-tagihan-' . date('Ymd-His') . '.pdf');
+    }
+
+    /**
+     * @param array<string, string> $filters
+     */
+    private function streamRekapTagihanCsv(AmalFatimahApiService $api, array $filters): StreamedResponse|RedirectResponse
+    {
+        $probe = $api->getDataTagihan($filters, self::REKAP_EXPORT_CHUNK, 0, true, [], true);
+        if (!$probe['ok']) {
+            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
+        }
+        $firstRows = $probe['data']['rows'] ?? [];
+        if (!is_array($firstRows) || $firstRows === []) {
+            return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk export rekap.');
+        }
+
+        $filename = 'rekap-tagihan-' . date('Ymd-His') . '.csv';
+
+        return response()->streamDownload(function () use ($api, $filters, $firstRows, $probe) {
+            set_time_limit(600);
+            @ini_set('memory_limit', '256M');
+
+            $h = fopen('php://output', 'w');
+            if ($h === false) {
+                return;
+            }
+            fprintf($h, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fputcsv($h, ['No', 'NIS', 'Nama', 'Nama Tagihan', 'Tahun AKA', 'Tagihan (Rp)'], ';');
+
+            $no = 1;
+            $offset = 0;
+            $maxRows = self::REKAP_EXPORT_MAX_ROWS;
+            $rows = $firstRows;
+            $hasMore = (bool) ($probe['data']['has_more'] ?? false);
+
+            while (true) {
+                if (!is_array($rows) || $rows === []) {
+                    break;
+                }
+                foreach ($rows as $r) {
+                    if (!is_array($r) || $no > $maxRows) {
+                        break 2;
+                    }
+                    fputcsv($h, [
+                        $no,
+                        trim((string) ($r['nis'] ?? '')),
+                        trim((string) ($r['nama'] ?? '')),
+                        trim((string) ($r['nama_tagihan'] ?? '')),
+                        trim((string) ($r['tahun_aka'] ?? '')),
+                        (int) ($r['tagihan'] ?? 0),
+                    ], ';');
+                    $no++;
+                }
+
+                if (!$hasMore || $no > $maxRows) {
+                    break;
+                }
+
+                $offset += count($rows);
+                if ($offset >= $maxRows) {
+                    break;
+                }
+
+                $res = $api->getDataTagihan(
+                    $filters,
+                    self::REKAP_EXPORT_CHUNK,
+                    $offset,
+                    true,
+                    [],
+                    true
+                );
+                if (!$res['ok']) {
+                    break;
+                }
+                $rows = $res['data']['rows'] ?? [];
+                $hasMore = (bool) ($res['data']['has_more'] ?? false);
+                if (function_exists('flush')) {
+                    flush();
+                }
+            }
+
+            fclose($h);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     /**
@@ -1027,9 +1136,9 @@ XML);
      * @param array<string, string> $filters
      * @return list<array<string, mixed>>|null
      */
-    private function fetchTagihanRowsForRekapCetak(AmalFatimahApiService $api, array $filters): ?array
+    private function fetchTagihanRowsForRekapCetak(AmalFatimahApiService $api, array $filters, int $maxRows = 3000): ?array
     {
-        $res = $api->getTagihanRekapCetak($filters, 5000);
+        $res = $api->getTagihanRekapCetak($filters, $maxRows);
         if ($res['ok']) {
             $rows = $res['data']['rows'] ?? [];
             if (is_array($rows) && $rows !== []) {
@@ -1037,7 +1146,42 @@ XML);
             }
         }
 
-        return $this->fetchAllDataTagihanRowsForExport($api, $filters, 5000);
+        return $this->fetchRekapTagihanRowsChunked($api, $filters, $maxRows);
+    }
+
+    /**
+     * @param array<string, string> $filters
+     * @return list<array<string, mixed>>|null
+     */
+    private function fetchRekapTagihanRowsChunked(AmalFatimahApiService $api, array $filters, int $maxRows): ?array
+    {
+        $chunk = min(self::REKAP_EXPORT_CHUNK, $maxRows);
+        $all = [];
+        $offset = 0;
+        $maxLoops = (int) ceil($maxRows / $chunk) + 2;
+
+        for ($loop = 0; $loop < $maxLoops && count($all) < $maxRows; $loop++) {
+            $res = $api->getDataTagihan($filters, $chunk, $offset, true, [], true);
+            if (!$res['ok']) {
+                return null;
+            }
+            $rows = $res['data']['rows'] ?? [];
+            if (!is_array($rows) || $rows === []) {
+                break;
+            }
+            foreach ($rows as $r) {
+                $all[] = $r;
+                if (count($all) >= $maxRows) {
+                    break 2;
+                }
+            }
+            if (!($res['data']['has_more'] ?? false)) {
+                break;
+            }
+            $offset += count($rows);
+        }
+
+        return $all;
     }
 
     /**

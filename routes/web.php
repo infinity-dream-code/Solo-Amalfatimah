@@ -147,6 +147,8 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::post('/manual-pembayaran-nis', [ManualPembayaranController::class, 'submit'])->name('manual_nis.submit');
         Route::get('/manual-pembayaran-non-siswa', [ManualPembayaranController::class, 'nonSiswa'])->name('manual_non_siswa');
         Route::post('/manual-pembayaran-non-siswa', [ManualPembayaranController::class, 'submit'])->name('manual_non_siswa.submit');
+        Route::get('/manual-pembayaran/siswa-search', [ManualPembayaranController::class, 'searchSiswa'])->name('manual.siswa_search');
+        Route::post('/manual-pembayaran/kuitansi', [ManualPembayaranController::class, 'printKuitansi'])->name('manual.kuitansi');
 
         // Penerimaan Siswa
         Route::get('/penerimaan-siswa/data', [PenerimaanSiswaController::class, 'data'])->name('penerimaan.data');

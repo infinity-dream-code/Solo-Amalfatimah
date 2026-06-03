@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Keuangan;
 
 use App\Http\Controllers\Controller;
 use App\Services\AmalFatimahApiService;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 class ManualPembayaranController extends Controller
@@ -35,6 +37,95 @@ class ManualPembayaranController extends Controller
         return $this->manualPembayaranIndex($request, $api, self::MODE_NON_SISWA);
     }
 
+    public function searchSiswa(Request $request, AmalFatimahApiService $api): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $mode = trim((string) $request->query('mode', self::MODE_PENDAFTARAN));
+        if (!in_array($mode, [self::MODE_PENDAFTARAN, self::MODE_NIS, self::MODE_NON_SISWA], true)) {
+            $mode = self::MODE_PENDAFTARAN;
+        }
+
+        if ($q === '') {
+            return response()->json(['rows' => []]);
+        }
+
+        $raw = $api->getSiswa(['search' => $q], 40, 0);
+        $rows = [];
+        foreach ($raw as $s) {
+            if (!is_array($s)) {
+                continue;
+            }
+            if ($mode === self::MODE_NON_SISWA && trim((string) ($s['num2nd'] ?? '')) === '') {
+                continue;
+            }
+            $rows[] = $this->mapSiswaSearchRow($s, $mode);
+        }
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    public function printKuitansi(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
+    {
+        $custid = (int) $request->input('custid', 0);
+        $custids = $request->input('custids', []);
+        if (!is_array($custids)) {
+            $custids = [];
+        }
+        $custids = array_values(array_unique(array_filter(array_map(static fn ($v) => (int) $v, $custids), static fn ($n) => $n > 0)));
+        if ($custid > 0) {
+            $custids[] = $custid;
+            $custids = array_values(array_unique($custids));
+        }
+        if ($custids === []) {
+            return redirect()->back()->with('manual_pembayaran_error', 'Data siswa tidak valid untuk cetak kuitansi.');
+        }
+
+        $today = now('Asia/Jakarta')->format('Y-m-d');
+        $filters = [
+            'tgl_dari' => $today,
+            'tgl_sampai' => $today,
+            'thn_angkatan' => '',
+            'thn_akademik' => '',
+            'kelas_id' => '',
+            'nama_tagihan' => '',
+            'siswa' => '',
+        ];
+
+        $res = $api->getKartuSiswaPenerimaan($filters, $custids);
+        if (!$res['ok']) {
+            return redirect()->back()->with('manual_pembayaran_error', $res['message'] ?? 'Gagal mengambil data kuitansi.');
+        }
+        $err = trim((string) ($res['data']['error'] ?? ''));
+        if ($err !== '') {
+            return redirect()->back()->with('manual_pembayaran_error', $err);
+        }
+        $cards = $res['data']['cards'] ?? [];
+        if (!is_array($cards) || $cards === []) {
+            $resAll = $api->getKartuSiswaPenerimaan([
+                'tgl_dari' => '',
+                'tgl_sampai' => '',
+                'thn_angkatan' => '',
+                'thn_akademik' => '',
+                'kelas_id' => '',
+                'nama_tagihan' => '',
+                'siswa' => '',
+            ], $custids);
+            if ($resAll['ok']) {
+                $cards = $resAll['data']['cards'] ?? [];
+            }
+        }
+        if (!is_array($cards) || $cards === []) {
+            return redirect()->back()->with('manual_pembayaran_error', 'Tidak ada data kuitansi untuk pembayaran ini.');
+        }
+
+        $pdf = Pdf::loadView('keuangan.penerimaan-siswa.kuitansi-pdf', [
+            'cards' => $cards,
+            'dengan_2000' => false,
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->stream('kuitansi-manual-' . date('Ymd-His') . '.pdf');
+    }
+
     private function manualPembayaranIndex(Request $request, AmalFatimahApiService $api, string $mode): View
     {
         $selectedCustid = (int) $request->query('custid', 0);
@@ -44,53 +135,6 @@ class ManualPembayaranController extends Controller
             $selectedBillcds = [];
         }
 
-        $siswaOptions = $this->loadSiswaOptions($api);
-        if ($mode === self::MODE_NON_SISWA) {
-            // Non-siswa hanya boleh cari via no. pendaftaran (NUM2ND).
-            $siswaOptions = array_values(array_filter($siswaOptions, static function (array $row): bool {
-                return trim((string) ($row['num2nd'] ?? '')) !== '';
-            }));
-        }
-        $searchUpper = mb_strtoupper($searchSiswa);
-        usort($siswaOptions, static function (array $a, array $b) use ($selectedCustid, $searchUpper, $mode): int {
-            $aCid = (int) ($a['custid'] ?? 0);
-            $bCid = (int) ($b['custid'] ?? 0);
-            if ($selectedCustid > 0) {
-                if ($aCid === $selectedCustid && $bCid !== $selectedCustid) {
-                    return -1;
-                }
-                if ($bCid === $selectedCustid && $aCid !== $selectedCustid) {
-                    return 1;
-                }
-            }
-
-            if ($searchUpper !== '') {
-                if ($mode === self::MODE_NIS) {
-                    // NIS = NOCUST; tanpa no. daftar (NUM2ND).
-                    $aText = mb_strtoupper(trim((string) (($a['nocust'] ?? '') . ' ' . ($a['nmcust'] ?? '') . ' ' . ($a['desc04'] ?? ''))));
-                    $bText = mb_strtoupper(trim((string) (($b['nocust'] ?? '') . ' ' . ($b['nmcust'] ?? '') . ' ' . ($b['desc04'] ?? ''))));
-                } elseif ($mode === self::MODE_NON_SISWA) {
-                    // Hanya no. daftar + nama; tanpa NIS/NOCUST.
-                    $aText = mb_strtoupper(trim((string) (($a['num2nd'] ?? '') . ' ' . ($a['nmcust'] ?? '') . ' ' . ($a['desc04'] ?? ''))));
-                    $bText = mb_strtoupper(trim((string) (($b['num2nd'] ?? '') . ' ' . ($b['nmcust'] ?? '') . ' ' . ($b['desc04'] ?? ''))));
-                } else {
-                    $aText = mb_strtoupper(trim((string) (($a['nis'] ?? '') . ' ' . ($a['num2nd'] ?? '') . ' ' . ($a['nocust'] ?? '') . ' ' . ($a['nmcust'] ?? '') . ' ' . ($a['desc04'] ?? ''))));
-                    $bText = mb_strtoupper(trim((string) (($b['nis'] ?? '') . ' ' . ($b['num2nd'] ?? '') . ' ' . ($b['nocust'] ?? '') . ' ' . ($b['nmcust'] ?? '') . ' ' . ($b['desc04'] ?? ''))));
-                }
-                $aStarts = str_starts_with($aText, $searchUpper) ? 1 : 0;
-                $bStarts = str_starts_with($bText, $searchUpper) ? 1 : 0;
-                if ($aStarts !== $bStarts) {
-                    return $aStarts > $bStarts ? -1 : 1;
-                }
-                $aHas = str_contains($aText, $searchUpper) ? 1 : 0;
-                $bHas = str_contains($bText, $searchUpper) ? 1 : 0;
-                if ($aHas !== $bHas) {
-                    return $aHas > $bHas ? -1 : 1;
-                }
-            }
-
-            return strcmp(trim((string) ($a['nmcust'] ?? '')), trim((string) ($b['nmcust'] ?? '')));
-        });
         $tahunAjaranOptions = $api->getThnAka();
         $bankOptions = $api->getManualPembayaranBankOptions();
 
@@ -108,29 +152,9 @@ class ManualPembayaranController extends Controller
                 $tagihanRows = is_array($selectedSiswa['tagihan_belum_lunas'] ?? null) ? $selectedSiswa['tagihan_belum_lunas'] : [];
                 $saldoVa = (int) ($selectedSiswa['SALDO_VA'] ?? $selectedSiswa['saldo_va'] ?? $selectedSiswa['SALDO'] ?? $selectedSiswa['saldo'] ?? 0);
                 $totalTagihan = (int) ($selectedSiswa['TOTAL_TAGIHAN'] ?? $selectedSiswa['total_tagihan'] ?? 0);
+                $selectedSiswaLabel = $this->formatSiswaLabel($selectedSiswa, $mode);
             } else {
                 $manualPembayaranError = $detail['message'] ?: 'Gagal memuat data siswa/tagihan dari server.';
-            }
-        }
-        if ($selectedCustid > 0) {
-            foreach ($siswaOptions as $s) {
-                if ((int) ($s['custid'] ?? 0) !== $selectedCustid) {
-                    continue;
-                }
-                $nocust = trim((string) ($s['nocust'] ?? ''));
-                $nmcust = trim((string) ($s['nmcust'] ?? ''));
-                $angkatan = trim((string) ($s['desc04'] ?? ''));
-                $nis = trim((string) ($s['nis'] ?? ''));
-                $num2nd = trim((string) ($s['num2nd'] ?? ''));
-                if ($mode === self::MODE_NIS) {
-                    $selectedSiswaLabel = $nocust . ' - ' . $nmcust . ' - ' . $angkatan;
-                } elseif ($mode === self::MODE_NON_SISWA) {
-                    $selectedSiswaLabel = $num2nd . ' - ' . $nmcust . ' - ' . $angkatan;
-                } else {
-                    $lead = $num2nd !== '' ? $num2nd : ($nis !== '' ? $nis : $nocust);
-                    $selectedSiswaLabel = $lead . ' - ' . $nmcust . ' - ' . $angkatan;
-                }
-                break;
             }
         }
 
@@ -143,7 +167,6 @@ class ManualPembayaranController extends Controller
         return view('keuangan.manual-pembayaran.index', [
             'pageTitle' => $pageTitle,
             'mpMode' => $mode,
-            'siswaOptions' => $siswaOptions,
             'tahunAjaranOptions' => $tahunAjaranOptions,
             'bankOptions' => $bankOptions,
             'selectedCustid' => $selectedCustid,
@@ -153,6 +176,9 @@ class ManualPembayaranController extends Controller
             'saldoVa' => $saldoVa,
             'totalTagihan' => $totalTagihan,
             'manualPembayaranError' => $manualPembayaranError,
+            'manualPembayaranSuccess' => (bool) session('manual_pembayaran_success', false),
+            'manualPembayaranSuccessMessage' => trim((string) session('manual_pembayaran_message', '')),
+            'manualPembayaranSuccessCustid' => (int) session('manual_pembayaran_custid', 0),
             'filters' => [
                 'siswa_search' => $searchSiswa,
                 'thn_aka' => trim((string) $request->query('thn_aka', '')),
@@ -192,46 +218,67 @@ class ManualPembayaranController extends Controller
             return redirect()->back()->withInput()->with('manual_pembayaran_error', $res['message'] ?: 'Gagal memproses pembayaran manual.');
         }
 
-        return $successHome->with('status', $res['message'] ?: 'Pembayaran manual berhasil diproses.');
+        return $successHome->with([
+            'manual_pembayaran_success' => true,
+            'manual_pembayaran_custid' => $custid,
+            'manual_pembayaran_message' => $res['message'] ?: 'Pembayaran manual berhasil diproses.',
+        ]);
     }
 
     /**
-     * WS getSiswa membatasi limit per request, jadi perlu paging agar autocomplete tidak kehilangan data.
-     *
-     * @return list<array<string,mixed>>
+     * @param array<string, mixed> $s
+     * @return array{cid: int, label: string, nocust: string, nis: string, num2nd: string, nmcust: string, angkatan: string}
      */
-    private function loadSiswaOptions(AmalFatimahApiService $api): array
+    private function mapSiswaSearchRow(array $s, string $mode): array
     {
-        return Cache::remember('manual_pembayaran:siswa_options:stcust_1', now()->addMinutes(5), function () use ($api): array {
-            $rows = [];
-            $seen = [];
-            $limit = 200;
-            $maxRows = 5000;
+        $nocust = trim((string) ($s['nocust'] ?? ''));
+        $nmcust = trim((string) ($s['nmcust'] ?? ''));
+        $num2nd = trim((string) ($s['num2nd'] ?? ''));
+        $angkatan = trim((string) ($s['desc04'] ?? ''));
+        $nisLike = $nocust !== '' ? $nocust : trim((string) ($s['nis'] ?? ''));
 
-            for ($offset = 0; $offset < $maxRows; $offset += $limit) {
-                $chunk = $api->getSiswa(['search' => '', 'stcust' => 1], $limit, $offset);
-                if ($chunk === []) {
-                    break;
-                }
+        return [
+            'cid' => (int) ($s['custid'] ?? 0),
+            'label' => $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust, $angkatan),
+            'nocust' => $nocust,
+            'nis' => trim((string) ($s['nis'] ?? '')),
+            'nis_like' => $nisLike,
+            'num2nd' => $num2nd,
+            'nmcust' => $nmcust,
+            'angkatan' => $angkatan,
+        ];
+    }
 
-                foreach ($chunk as $row) {
-                    if (!is_array($row)) {
-                        continue;
-                    }
-                    $cid = (int) ($row['custid'] ?? 0);
-                    if ($cid <= 0 || isset($seen[$cid])) {
-                        continue;
-                    }
-                    $seen[$cid] = true;
-                    $rows[] = $row;
-                }
+    /**
+     * @param array<string, mixed> $s
+     */
+    private function formatSiswaLabel(array $s, string $mode): string
+    {
+        $nocust = trim((string) ($s['NOCUST'] ?? $s['nocust'] ?? ''));
+        $nmcust = trim((string) ($s['NMCUST'] ?? $s['nmcust'] ?? ''));
+        $num2nd = trim((string) ($s['NUM2ND'] ?? $s['num2nd'] ?? ''));
+        $angkatan = trim((string) ($s['DESC04'] ?? $s['desc04'] ?? ''));
+        $nisLike = $nocust !== '' ? $nocust : trim((string) ($s['nis'] ?? ''));
 
-                if (count($chunk) < $limit || count($rows) >= $maxRows) {
-                    break;
-                }
-            }
+        return $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust, $angkatan);
+    }
 
-            return $rows;
-        });
+    private function formatSiswaPartsLabel(
+        string $mode,
+        string $nisLike,
+        string $num2nd,
+        string $nocust,
+        string $nmcust,
+        string $angkatan
+    ): string {
+        if ($mode === self::MODE_NIS) {
+            $lead = $nisLike !== '' ? $nisLike : ($nocust !== '' ? $nocust : '—');
+        } elseif ($mode === self::MODE_NON_SISWA) {
+            $lead = $num2nd !== '' ? $num2nd : '—';
+        } else {
+            $lead = $num2nd !== '' ? $num2nd : ($nisLike !== '' ? $nisLike : ($nocust !== '' ? $nocust : '—'));
+        }
+
+        return trim($lead . ' - ' . $nmcust . ' - ' . $angkatan, ' -');
     }
 }

@@ -3486,14 +3486,23 @@ function getDataTagihan(array $req): array
 
     $rekapCetak = (int) ($req['rekap_cetak'] ?? 0) === 1;
     $forExport = (int) ($req['for_export'] ?? 0) === 1 || $rekapCetak;
+    $bulkExport = (int) ($req['bulk_export'] ?? 0) === 1;
     if ($rekapCetak) {
-        $maxCap = 5000;
-        $limit = min(max((int) ($req['limit'] ?? 5000), 1), $maxCap);
-        $offset = 0;
-        $includeTotal = false;
-        $sqlLimit = $limit;
+        if ($bulkExport) {
+            $maxCap = 50000;
+            $limit = min(max((int) ($req['limit'] ?? 50000), 1), $maxCap);
+            $offset = 0;
+            $includeTotal = false;
+            $sqlLimit = $limit;
+        } else {
+            $maxCap = 5000;
+            $limit = min(max((int) ($req['limit'] ?? 5000), 1), $maxCap);
+            $offset = max((int) ($req['offset'] ?? 0), 0);
+            $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
+            $sqlLimit = $includeTotal ? $limit : min($maxCap, $limit + 1);
+        }
     } else {
-        $maxCap = $forExport ? 2000 : 200;
+        $maxCap = $forExport ? 5000 : 200;
         $limit = min(max((int) ($req['limit'] ?? 10), 1), $maxCap);
         $offset = max((int) ($req['offset'] ?? 0), 0);
         $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
@@ -3556,7 +3565,7 @@ function getDataTagihan(array $req): array
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $hasMore = false;
-    if ($rekapCetak) {
+    if ($rekapCetak && $bulkExport) {
         $hasMore = false;
     } elseif (!$includeTotal && count($rows) > $limit) {
         array_pop($rows);
@@ -3692,13 +3701,14 @@ function getTagihanKartuSiswa(array $req): array
 }
 
 /**
- * Cetak rekap tagihan: satu query sesuai filter (maks 5000 baris).
+ * Cetak rekap tagihan: satu query sesuai filter (maks 50000 baris via bulk_export).
  *
  * @return array{rows: array<int, array<string, mixed>>}
  */
 function getTagihanRekapCetak(array $req): array
 {
     $req['rekap_cetak'] = 1;
+    $req['bulk_export'] = 1;
     $data = getDataTagihan($req);
 
     return ['rows' => $data['rows']];
