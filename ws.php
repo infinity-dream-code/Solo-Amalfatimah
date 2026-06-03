@@ -3359,20 +3359,6 @@ function penerimaanBuildPenerimaanFiltersFromReq(array $req): array
 }
 
 /**
- * Apakah request Data Tagihan punya filter aktif (wajib agar tidak scan seluruh scctbill).
- */
-function dataTagihanReqHasFilters(array $req): bool
-{
-    foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'siswa'] as $k) {
-        if (trim((string) ($req[$k] ?? '')) !== '') {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
  * Data tagihan (belum & sudah lunas) untuk halaman Data Tagihan.
  * Pagination: LIMIT/OFFSET (+1 baris bila include_total=0, tanpa COUNT(*)).
  *
@@ -3380,10 +3366,6 @@ function dataTagihanReqHasFilters(array $req): bool
  */
 function getDataTagihan(array $req): array
 {
-    if (!dataTagihanReqHasFilters($req)) {
-        return ['rows' => [], 'total' => 0];
-    }
-
     $tWall0 = microtime(true);
     $pdo = dbConnectPdo();
 
@@ -3488,13 +3470,14 @@ function getDataTagihan(array $req): array
             TRIM(b.BILLNM) AS nama_tagihan,
             COALESCE(b.BILLAM, 0) AS tagihan,
             TRIM(b.BTA) AS tahun_aka,
-            COALESCE(b.furutan, 0) AS furutan,
+            COALESCE(b.FUrutan, b.furutan, 0) AS furutan,
+            TRIM(CAST(b.AA AS CHAR)) AS aa,
             TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
         FROM scctbill b
         INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
         LEFT JOIN mst_kelas mk ON mk.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
         WHERE {$whereSql}
-        ORDER BY COALESCE(b.furutan, 0) {$sortUrutan}, b.CUSTID ASC, b.BILLCD ASC
+        ORDER BY COALESCE(b.FUrutan, b.furutan, 0) {$sortUrutan}, b.CUSTID ASC, b.BILLCD ASC
         LIMIT :limit OFFSET :offset
     ";
 
@@ -5593,40 +5576,70 @@ function createManualPembayaran(array $req): array
 
 function updateDataTagihanUrutan(array $req): array
 {
-    $custid    = (int) ($req['custid'] ?? 0);
+    $custid    = trim((string) ($req['custid'] ?? ''));
+    $aa        = trim((string) ($req['aa'] ?? ''));
     $billcd    = trim((string) ($req['billcd'] ?? ''));
     $direction = strtolower(trim((string) ($req['direction'] ?? '')));
 
-    if ($custid <= 0 || $billcd === '' || !in_array($direction, ['up', 'down'], true)) {
+    if ($custid === '' || !in_array($direction, ['up', 'down'], true)) {
         http_response_code(422);
-        echo json_encode(['status' => 422, 'message' => 'custid, billcd, dan direction (up|down) wajib valid'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['status' => 422, 'message' => 'custid dan direction (up|down) wajib valid'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $pdo = dbConnectPdo();
-    $st  = $pdo->prepare('
-        SELECT COALESCE(furutan, 0) AS f
-        FROM scctbill
-        WHERE CUSTID = :c AND BILLCD = :b
-        LIMIT 1
-    ');
-    $st->execute([':c' => $custid, ':b' => $billcd]);
-    $row = $st->fetch(PDO::FETCH_ASSOC);
-    if (!$row) {
+
+    if ($aa === '' && $billcd !== '') {
+        $stAa = $pdo->prepare('
+            SELECT TRIM(CAST(AA AS CHAR)) AS aa
+            FROM scctbill
+            WHERE CUSTID = :c AND TRIM(BILLCD) = :b
+            LIMIT 1
+        ');
+        $stAa->execute([':c' => $custid, ':b' => $billcd]);
+        $aa = trim((string) ($stAa->fetchColumn() ?: ''));
+    }
+
+    if ($aa === '') {
         http_response_code(404);
-        echo json_encode(['status' => 404, 'message' => 'Tagihan tidak ditemukan'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['status' => 404, 'message' => 'Kolom AA tagihan tidak ditemukan'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
-    $cur   = (int) ($row['f'] ?? 0);
-    $newF  = $direction === 'up' ? max(1, $cur - 1) : $cur + 1;
-    $up    = $pdo->prepare('UPDATE scctbill SET furutan = :f WHERE CUSTID = :c AND BILLCD = :b');
-    $up->execute([':f' => $newF, ':c' => $custid, ':b' => $billcd]);
+    $proc = $direction === 'up' ? 'UpdateUrutUP' : 'UpdateUrutDOWN';
+
+    try {
+        $call = $pdo->prepare("CALL {$proc}(:v_CUSTID, :p_AA)");
+        $call->execute([
+            ':v_CUSTID' => $custid,
+            ':p_AA'      => $aa,
+        ]);
+        do {
+            $call->closeCursor();
+        } while ($call->nextRowset());
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode([
+            'status'  => 500,
+            'message' => 'Gagal memanggil prosedur urutan: ' . $e->getMessage(),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $st = $pdo->prepare('
+        SELECT COALESCE(FUrutan, furutan, 0) AS f, TRIM(BILLCD) AS billcd
+        FROM scctbill
+        WHERE CUSTID = :c AND TRIM(CAST(AA AS CHAR)) = :aa
+        LIMIT 1
+    ');
+    $st->execute([':c' => $custid, ':aa' => $aa]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
 
     return [
-        'custid'   => $custid,
-        'billcd'   => $billcd,
-        'furutan'  => $newF,
+        'custid'  => (int) $custid,
+        'aa'      => $aa,
+        'billcd'  => trim((string) ($row['billcd'] ?? $billcd)),
+        'furutan' => (int) ($row['f'] ?? 0),
     ];
 }
 

@@ -2836,7 +2836,7 @@ class AmalFatimahApiService
     /**
      * @return array{ok: bool, message: string, data: array<string, mixed>}
      */
-    public function updateDataTagihanUrutan(int $custid, string $billcd, string $direction): array
+    public function updateDataTagihanUrutan(int $custid, string $billcd, string $direction, ?string $aa = null): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -2849,6 +2849,10 @@ class AmalFatimahApiService
             'billcd' => $billcd,
             'direction' => $direction,
         ];
+        $aa = trim((string) ($aa ?? ''));
+        if ($aa !== '') {
+            $body['aa'] = $aa;
+        }
 
         try {
             $response = Http::timeout(20)->post($url, $body);

@@ -17,20 +17,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TagihanSiswaController extends Controller
 {
-    /**
-     * @param array<string, mixed> $filters
-     */
-    private function dataTagihanHasActiveFilters(array $filters): bool
-    {
-        foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'siswa'] as $key) {
-            if (trim((string) ($filters[$key] ?? '')) !== '') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     public function fungsi(Request $request, AmalFatimahApiService $api): JsonResponse
     {
         $thnAkademik = trim((string) $request->query('thn_akademik', ''));
@@ -735,24 +721,15 @@ XML);
             return $api->getFilterBuatTagihan();
         });
 
-        $wasSubmitted = $request->hasAny([
-            'tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'siswa',
-        ]);
-        $hasActiveFilters = $this->dataTagihanHasActiveFilters($filters);
-
         $rows = [];
         $total = 0;
         $errorMsg = '';
-        if ($hasActiveFilters) {
-            $res = $api->getDataTagihan($filters, $perPage, ($page - 1) * $perPage);
-            if ($res['ok']) {
-                $rows = $res['data']['rows'] ?? [];
-                $total = (int) ($res['data']['total'] ?? 0);
-            } else {
-                $errorMsg = $res['message'] ?? 'Gagal memuat data.';
-            }
-        } elseif ($wasSubmitted) {
-            $errorMsg = 'Pilih minimal satu filter (tanggal, tahun akademik, kelas, nama tagihan, atau siswa).';
+        $res = $api->getDataTagihan($filters, $perPage, ($page - 1) * $perPage);
+        if ($res['ok']) {
+            $rows = $res['data']['rows'] ?? [];
+            $total = (int) ($res['data']['total'] ?? 0);
+        } else {
+            $errorMsg = $res['message'] ?? 'Gagal memuat data.';
         }
 
         $paginator = new LengthAwarePaginator(
@@ -769,8 +746,6 @@ XML);
             'filters' => $filters,
             'tagihanRows' => $paginator,
             'errorMsg' => $errorMsg,
-            'hasSearchRequest' => $hasActiveFilters,
-            'awaitingFilter' => !$hasActiveFilters && !$wasSubmitted,
         ]);
     }
 
@@ -779,13 +754,15 @@ XML);
         $validated = $request->validate([
             'custid' => ['required', 'integer', 'min:1'],
             'billcd' => ['required', 'string'],
+            'aa' => ['nullable', 'string'],
             'direction' => ['required', 'in:up,down'],
         ]);
 
         $res = $api->updateDataTagihanUrutan(
             (int) $validated['custid'],
             trim((string) $validated['billcd']),
-            (string) $validated['direction']
+            (string) $validated['direction'],
+            trim((string) ($validated['aa'] ?? '')) !== '' ? trim((string) $validated['aa']) : null
         );
 
         return response()->json([

@@ -105,13 +105,13 @@
 
     <div class="page-heading">
         <h2>Data Tagihan Siswa</h2>
-        <p>Filter tagihan, lihat NIS &amp; virtual account, ubah urutan (<strong>furutan</strong> di <strong>scctbill</strong>).</p>
+        <p>Filter tagihan, lihat NIS &amp; virtual account, ubah urutan naik/turun per siswa.</p>
     </div>
 
     <div class="dt-wrap">
         <div class="dt-card">
             <div class="dt-title">Data Tagihan</div>
-            <div class="dt-sub">Isi minimal satu filter lalu klik <strong>Cari</strong>. Data dimuat per halaman (bukan seluruh tabel sekaligus).</div>
+            <div class="dt-sub">Data dimuat per halaman (pagination). Filter opsional — kosongkan lalu <strong>Cari</strong> untuk semua tagihan aktif.</div>
 
             @if (($errorMsg ?? '') !== '')
                 <div class="dt-alert dt-err">{{ $errorMsg }}</div>
@@ -289,6 +289,7 @@
                                 $custid = (int) ($r['custid'] ?? 0);
                                 $billcd = (string) ($r['billcd'] ?? '');
                                 $furutan = (int) ($r['furutan'] ?? 0);
+                                $aa = trim((string) ($r['aa'] ?? ''));
                                 $paidRaw = $r['paidst'] ?? '0';
                                 $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
                                 $rowNo = ($tagihanRows->firstItem() ?? 0) + $loop->index;
@@ -310,15 +311,15 @@
                                 <td>{{ $r['tahun_aka'] ?? '-' }}</td>
                                 <td class="dt-num"><strong>{{ $furutan }}</strong></td>
                                 <td>
-                                    @if ($custid > 0 && $billcd !== '')
-                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}">↑ Naikkan</button>
+                                    @if ($custid > 0 && $aa !== '')
+                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}">↑ Naikkan</button>
                                     @else
                                         —
                                     @endif
                                 </td>
                                 <td>
-                                    @if ($custid > 0 && $billcd !== '')
-                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}">↓ Turunkan</button>
+                                    @if ($custid > 0 && $aa !== '')
+                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}">↓ Turunkan</button>
                                     @else
                                         —
                                     @endif
@@ -335,13 +336,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="16" style="text-align:center;color:#6b7280;padding:20px;">
-                                    @if (!empty($awaitingFilter))
-                                        Pilih filter lalu klik <strong>Cari</strong> untuk menampilkan data tagihan.
-                                    @else
-                                        Tidak ada data untuk filter ini.
-                                    @endif
-                                </td>
+                                <td colspan="16" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -503,10 +498,11 @@
                 btn.addEventListener('click', function () {
                     const custid = parseInt(btn.getAttribute('data-custid'), 10);
                     const billcd = btn.getAttribute('data-billcd') || '';
+                    const aa = btn.getAttribute('data-aa') || '';
                     const direction = btn.getAttribute('data-act') === 'up' ? 'up' : 'down';
-                    if (!custid || !billcd) return;
+                    if (!custid || !aa) return;
                     btn.disabled = true;
-                    postJson(urlUrutan, { custid: custid, billcd: billcd, direction: direction })
+                    postJson(urlUrutan, { custid: custid, billcd: billcd, aa: aa, direction: direction })
                         .then(function (res) {
                             if (res && res.ok) {
                                 window.location.reload();
