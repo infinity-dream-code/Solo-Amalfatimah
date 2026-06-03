@@ -14,7 +14,7 @@
         .rk-btn-search { background: #4f6ef7; border-color: #4f6ef7; color: #fff; }
         .rk-btn-print { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
         .rk-table-wrap { overflow-x:auto; }
-        .rk-table { width:100%; min-width:1600px; border-collapse: collapse; font-size:12px; }
+        .rk-table { width:100%; min-width:1280px; border-collapse: collapse; font-size:12px; }
         .rk-table th,.rk-table td { border-bottom:1px solid #eef2f7; padding:9px 8px; text-align:left; white-space: nowrap; }
         .rk-table th { background:#fafbfd; color:#4b5563; font-weight:700; }
         .rk-check { width: 34px; text-align: center; }
@@ -134,21 +134,20 @@
                     <thead>
                         <tr>
                             <th class="rk-check"><input type="checkbox" id="rkCheckAll"></th>
-                            <th>NO</th>
-                            <th>REK</th>
-                            <th>KELAS</th>
-                            <th>KELOMPOK</th>
-                            <th>ANGKATAN</th>
-                            <th>KODE</th>
-                            <th>NAMA POST</th>
-                            <th>TAGIHAN</th>
+                            <th>No</th>
                             <th>NIS</th>
-                            <th>NO VA</th>
-                            <th>NAMA</th>
-                            <th>UNIT</th>
-                            <th>NAMA TAGIHAN</th>
-                            <th>TAHUN AKA</th>
-                            <th>URUTAN</th>
+                            <th>No VA</th>
+                            <th>Nama</th>
+                            <th>Unit</th>
+                            <th>Kelas</th>
+                            <th>Kelompok</th>
+                            <th>Angkatan</th>
+                            <th>Kode</th>
+                            <th>Nama Post</th>
+                            <th>Nama Tagihan</th>
+                            <th>Tahun AKA</th>
+                            <th class="rk-num">Tagihan</th>
+                            <th class="rk-center">Urutan</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -170,23 +169,22 @@
                                     >
                                 </td>
                                 <td>{{ ($rekapRows->firstItem() ?? 0) + $loop->index }}</td>
-                                <td>{{ $rkCell($row, 'rek') }}</td>
+                                <td>{{ $rkCell($row, 'nis') }}</td>
+                                <td>{{ $rkCell($row, 'no_va') }}</td>
+                                <td>{{ $rkCell($row, 'nama') }}</td>
+                                <td>{{ $rkCell($row, 'unit') }}</td>
                                 <td>{{ $rkCell($row, 'kelas') }}</td>
                                 <td>{{ $rkCell($row, 'kelompok') }}</td>
                                 <td>{{ $rkCell($row, 'angkatan') }}</td>
                                 <td>{{ $rkCell($row, 'kode', (string) ($row['billcd'] ?? '')) }}</td>
                                 <td>{{ $rkCell($row, 'nama_post', (string) ($row['nama_tagihan'] ?? '')) }}</td>
-                                <td class="rk-num">{{ number_format((int) ($row['tagihan'] ?? 0), 0, ',', '.') }}</td>
-                                <td>{{ $rkCell($row, 'nis') }}</td>
-                                <td>{{ $rkCell($row, 'no_va') }}</td>
-                                <td>{{ $rkCell($row, 'nama') }}</td>
-                                <td>{{ $rkCell($row, 'unit') }}</td>
                                 <td>{{ $rkCell($row, 'nama_tagihan') }}</td>
                                 <td>{{ $rkCell($row, 'tahun_aka') }}</td>
+                                <td class="rk-num">Rp {{ number_format((int) ($row['tagihan'] ?? 0), 0, ',', '.') }}</td>
                                 <td class="rk-center">{{ (int) ($row['furutan'] ?? 0) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="16" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data</td></tr>
+                            <tr><td colspan="15" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data</td></tr>
                         @endforelse
                     </tbody>
                 </table>

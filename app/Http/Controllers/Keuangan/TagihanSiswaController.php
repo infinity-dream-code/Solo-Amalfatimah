@@ -1060,7 +1060,6 @@ XML);
             $billcd = trim((string) ($r['billcd'] ?? ''));
             $namaTagihan = trim((string) ($r['nama_tagihan'] ?? ''));
             $out[] = array_merge($r, [
-                'rek' => trim((string) ($r['rek'] ?? $r['billac'] ?? '')),
                 'angkatan' => trim((string) ($r['angkatan'] ?? $r['desc04'] ?? '')),
                 'kode' => trim((string) ($r['kode'] ?? $billcd)),
                 'nama_post' => trim((string) ($r['nama_post'] ?? $namaTagihan)),
