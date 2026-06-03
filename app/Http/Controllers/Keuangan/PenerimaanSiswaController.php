@@ -216,38 +216,37 @@ class PenerimaanSiswaController extends Controller
     }
 
     /**
-     * Rekap data penerimaan (Excel) — mengikuti filter halaman; tanggal tidak wajib; hingga 8000 baris (lihat WS pdf_export).
+     * Rekap data penerimaan (PDF) — matrix per siswa × jenis tagihan; hingga 8000 baris sumber.
      */
     public function printRekapPdf(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {
-        $filters = $this->penerimaanFiltersFromPost($request);
-
-        $res = $api->getDataPenerimaanPdfExport($filters);
-        if (!$res['ok']) {
-            return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data untuk Excel.');
+        $export = $this->buildRekapPenerimaanExport($request, $api);
+        if ($export instanceof RedirectResponse) {
+            return $export;
         }
 
-        $rows = $res['data']['rows'] ?? [];
-        if (!is_array($rows) || $rows === []) {
-            return redirect()->back()->with('export_error', 'Tidak ada data penerimaan untuk filter ini.');
+        $pdf = Pdf::loadView('keuangan.penerimaan-siswa.rekap-penerimaan-pdf', $export)
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->stream('rekap-penerimaan-' . date('Ymd-His') . '.pdf');
+    }
+
+    /**
+     * Rekap data penerimaan (Excel) — format yang sama dengan PDF.
+     */
+    public function printRekapExcel(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
+    {
+        $export = $this->buildRekapPenerimaanExport($request, $api);
+        if ($export instanceof RedirectResponse) {
+            return $export;
         }
 
-        $norm = [];
-        foreach ($rows as $row) {
-            $r = is_array($row) ? array_change_key_case($row, CASE_LOWER) : [];
-            $norm[] = $r;
-        }
-
-        $matrix = $this->rekapPenerimaanMatrixFromRows($norm);
-        $filterSummary = $this->rekapPenerimaanPdfFilterSummary($filters);
-        $this->fillRekapSummaryFromRows($filterSummary, $norm);
-
-        $maybeTruncated = count($norm) >= 8000;
-
-        $columns = is_array($matrix['columns'] ?? null) ? $matrix['columns'] : [];
-        $students = is_array($matrix['students'] ?? null) ? $matrix['students'] : [];
-        $colTotals = is_array($matrix['col_totals'] ?? null) ? $matrix['col_totals'] : [];
-        $grandTotal = (int) ($matrix['grand_total'] ?? 0);
+        $columns = $export['columns'];
+        $students = $export['students'];
+        $colTotals = $export['colTotals'];
+        $grandTotal = $export['grandTotal'];
+        $filterSummary = $export['filterSummary'];
+        $maybeTruncated = $export['maybeTruncated'];
 
         $esc = static fn (string $s): string => htmlspecialchars($s, ENT_XML1 | ENT_COMPAT, 'UTF-8');
         $rp = static fn (int $n): string => 'Rp ' . number_format($n, 0, ',', '.');
@@ -330,6 +329,49 @@ class PenerimaanSiswaController extends Controller
             'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="' . $fn . '"',
         ]);
+    }
+
+    /**
+     * @return array{
+     *     columns: list<string>,
+     *     students: list<array<string, mixed>>,
+     *     colTotals: array<string, int>,
+     *     grandTotal: int,
+     *     filterSummary: array<string, string>,
+     *     maybeTruncated: bool
+     * }|RedirectResponse
+     */
+    private function buildRekapPenerimaanExport(Request $request, AmalFatimahApiService $api): array|RedirectResponse
+    {
+        $filters = $this->penerimaanFiltersFromPost($request);
+
+        $res = $api->getDataPenerimaanPdfExport($filters);
+        if (!$res['ok']) {
+            return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data rekap.');
+        }
+
+        $rows = $res['data']['rows'] ?? [];
+        if (!is_array($rows) || $rows === []) {
+            return redirect()->back()->with('export_error', 'Tidak ada data penerimaan untuk filter ini.');
+        }
+
+        $norm = [];
+        foreach ($rows as $row) {
+            $norm[] = is_array($row) ? array_change_key_case($row, CASE_LOWER) : [];
+        }
+
+        $matrix = $this->rekapPenerimaanMatrixFromRows($norm);
+        $filterSummary = $this->rekapPenerimaanPdfFilterSummary($filters);
+        $this->fillRekapSummaryFromRows($filterSummary, $norm);
+
+        return [
+            'columns' => is_array($matrix['columns'] ?? null) ? $matrix['columns'] : [],
+            'students' => is_array($matrix['students'] ?? null) ? $matrix['students'] : [],
+            'colTotals' => is_array($matrix['col_totals'] ?? null) ? $matrix['col_totals'] : [],
+            'grandTotal' => (int) ($matrix['grand_total'] ?? 0),
+            'filterSummary' => $filterSummary,
+            'maybeTruncated' => count($norm) >= 8000,
+        ];
     }
 
     /**

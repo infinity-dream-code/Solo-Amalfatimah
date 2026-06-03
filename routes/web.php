@@ -154,6 +154,7 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::post('/penerimaan-siswa/kartu-siswa', [PenerimaanSiswaController::class, 'printKartuSiswa'])->name('penerimaan.kartu_siswa');
         Route::post('/penerimaan-siswa/kuitansi', [PenerimaanSiswaController::class, 'printKuitansi'])->name('penerimaan.kuitansi');
         Route::match(['get', 'post'], '/penerimaan-siswa/rekap-pdf', [PenerimaanSiswaController::class, 'printRekapPdf'])->name('penerimaan.rekap_pdf');
+        Route::match(['get', 'post'], '/penerimaan-siswa/rekap-excel', [PenerimaanSiswaController::class, 'printRekapExcel'])->name('penerimaan.rekap_excel');
         Route::match(['get', 'post'], '/penerimaan_siswa/rekap_pdf', [PenerimaanSiswaController::class, 'printRekapPdf']);
         Route::get('/penerimaan-siswa/rekap', [PenerimaanSiswaController::class, 'rekap'])->name('penerimaan.rekap');
         Route::get('/penerimaan-siswa/rekap/rows', [PenerimaanSiswaController::class, 'rekapRows'])->name('penerimaan.rekap_rows');

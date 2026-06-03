@@ -111,7 +111,7 @@
     <div class="dt-wrap">
         <div class="dt-card">
             <div class="dt-title">Data Tagihan</div>
-            <div class="dt-sub"></div>
+            <div class="dt-sub">Isi minimal satu filter lalu klik <strong>Cari</strong>. Data dimuat per halaman (bukan seluruh tabel sekaligus).</div>
 
             @if (($errorMsg ?? '') !== '')
                 <div class="dt-alert dt-err">{{ $errorMsg }}</div>
@@ -335,7 +335,13 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="16" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data</td>
+                                <td colspan="16" style="text-align:center;color:#6b7280;padding:20px;">
+                                    @if (!empty($awaitingFilter))
+                                        Pilih filter lalu klik <strong>Cari</strong> untuk menampilkan data tagihan.
+                                    @else
+                                        Tidak ada data untuk filter ini.
+                                    @endif
+                                </td>
                             </tr>
                         @endforelse
                     </tbody>

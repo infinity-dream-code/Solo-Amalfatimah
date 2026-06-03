@@ -3359,12 +3359,32 @@ function penerimaanBuildPenerimaanFiltersFromReq(array $req): array
 }
 
 /**
+ * Apakah request Data Tagihan punya filter aktif (wajib agar tidak scan seluruh scctbill).
+ */
+function dataTagihanReqHasFilters(array $req): bool
+{
+    foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'siswa'] as $k) {
+        if (trim((string) ($req[$k] ?? '')) !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Data tagihan (belum & sudah lunas) untuk halaman Data Tagihan.
+ * Pagination: LIMIT/OFFSET (+1 baris bila include_total=0, tanpa COUNT(*)).
  *
  * @return array{rows: array<int, array<string, mixed>>, total: int}
  */
 function getDataTagihan(array $req): array
 {
+    if (!dataTagihanReqHasFilters($req)) {
+        return ['rows' => [], 'total' => 0];
+    }
+
+    $tWall0 = microtime(true);
     $pdo = dbConnectPdo();
 
     $tglDari = trim((string) ($req['tgl_dari'] ?? ''));
@@ -3431,7 +3451,7 @@ function getDataTagihan(array $req): array
     }
 
     if ($kelasId !== '') {
-        $where[] = 'TRIM(c.CODE03) = :kelas_id';
+        $where[] = 'c.CODE03 = :kelas_id';
         $params[':kelas_id'] = $kelasId;
     }
 
@@ -3471,8 +3491,8 @@ function getDataTagihan(array $req): array
             COALESCE(b.furutan, 0) AS furutan,
             TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
         FROM scctbill b
-        JOIN scctcust c ON c.CUSTID = b.CUSTID
-        LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
+        INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
+        LEFT JOIN mst_kelas mk ON mk.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
         WHERE {$whereSql}
         ORDER BY COALESCE(b.furutan, 0) {$sortUrutan}, b.CUSTID ASC, b.BILLCD ASC
         LIMIT :limit OFFSET :offset
@@ -3498,7 +3518,7 @@ function getDataTagihan(array $req): array
         $stmtCount = $pdo->prepare("
             SELECT COUNT(*) AS total
             FROM scctbill b
-            JOIN scctcust c ON c.CUSTID = b.CUSTID
+            INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
             WHERE {$whereSql}
         ");
         foreach ($params as $k => $v) {
@@ -3511,6 +3531,18 @@ function getDataTagihan(array $req): array
         $total = $offset + count($rows) + ($hasMore ? 1 : 0);
     }
 
+    $ms = round((microtime(true) - $tWall0) * 1000, 2);
+    if ($ms >= 500) {
+        writeLog([
+            'scope' => 'getDataTagihan',
+            'ms' => $ms,
+            'limit' => $limit,
+            'offset' => $offset,
+            'include_total' => $includeTotal ? 1 : 0,
+            'row_count' => count($rows),
+        ]);
+    }
+
     return [
         'rows' => $rows,
         'total' => $total,
@@ -3519,11 +3551,10 @@ function getDataTagihan(array $req): array
 
 /**
  * Data penerimaan (tagihan lunas) untuk halaman Data Penerimaan.
- * Pagination: LIMIT/OFFSET; urutan: AA DESC bila kolom AA ada di scctbill, else PAIDDT DESC.
+ * Pagination: LIMIT/OFFSET; urutan: PAIDDT DESC (tanggal bayar).
  * include_total=0: tanpa COUNT(*) (hemat waktu pada dataset besar); ambil limit+1 baris agar client tahu ada halaman berikutnya.
  * include_total=1 (default): COUNT + SELECT seperti biasa (untuk laporan yang butuh total pasti).
- * Filter tanggal memakai rentang datetime pada kolom (bukan DATE(kolom)) agar indeks PAIDDT/FTGLTagihan bisa dipakai.
- * Indeks disarankan: (FSTSBolehBayar, PAIDST, AA DESC) jika AA ada; else (FSTSBolehBayar, PAIDST, PAIDDT DESC).
+ * Filter tanggal memakai rentang datetime pada kolom PAIDDT agar indeks bisa dipakai.
  */
 function getDataPenerimaan(array $req): array
 {
@@ -3566,9 +3597,7 @@ function getDataPenerimaan(array $req): array
 
     $useMkJoin = ($sekolah !== '');
 
-    $orderSql = $useAaOrder
-        ? 'b.AA DESC, b.CUSTID DESC, b.BILLCD DESC'
-        : 'b.PAIDDT DESC, b.BILLCD ASC';
+    $orderSql = 'b.PAIDDT DESC, b.CUSTID DESC, b.BILLCD ASC';
 
     $sqlMetode = "
         COALESCE(

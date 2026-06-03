@@ -150,7 +150,8 @@
                 </ul>
 
                 <div class="rp-actions">
-                    <button type="button" class="rp-btn rp-btn-print" id="rpBtnRekapPdf" title="Excel rekap (maks. 8.000 baris)">Export Rekap Excel</button>
+                    <button type="button" class="rp-btn rp-btn-print" id="rpBtnRekapPdf" title="PDF rekap (maks. 8.000 baris)">Cetak PDF</button>
+                    <button type="button" class="rp-btn rp-btn-print" id="rpBtnRekapExcel" title="Excel rekap (maks. 8.000 baris)">Export Excel</button>
                     <button type="button" class="rp-btn rp-btn-kartu" id="rpBtnKartu">Cetak Kartu Siswa</button>
                     <a class="rp-btn" href="{{ route('keu.penerimaan.rekap') }}">Reset</a>
                     <button type="submit" class="rp-btn rp-btn-search">Cari</button>
@@ -228,6 +229,9 @@
         @csrf
     </form>
     <form id="rpFormRekapPdf" method="POST" action="{{ route('keu.penerimaan.rekap_pdf') }}" target="_blank" style="display:none;" aria-hidden="true">
+        @csrf
+    </form>
+    <form id="rpFormRekapExcel" method="POST" action="{{ route('keu.penerimaan.rekap_excel') }}" target="_blank" style="display:none;" aria-hidden="true">
         @csrf
     </form>
 
@@ -353,6 +357,15 @@
                 rpBtnRekapPdf.addEventListener('click', function () {
                     rpFillExportForm(rpFormRekapPdf, 'data-rp-rekap-pdf-dyn');
                     rpFormRekapPdf.submit();
+                });
+            }
+
+            var rpBtnRekapExcel = document.getElementById('rpBtnRekapExcel');
+            var rpFormRekapExcel = document.getElementById('rpFormRekapExcel');
+            if (rpBtnRekapExcel && rpFormRekapExcel) {
+                rpBtnRekapExcel.addEventListener('click', function () {
+                    rpFillExportForm(rpFormRekapExcel, 'data-rp-rekap-excel-dyn');
+                    rpFormRekapExcel.submit();
                 });
             }
 

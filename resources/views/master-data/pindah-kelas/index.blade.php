@@ -26,13 +26,66 @@
         .pk-alert { margin-bottom:10px; padding:10px 12px; border-radius:8px; font-size:13px; font-weight:700; }
         .pk-ok { background:#ecfdf5; color:#047857; }
         .pk-err { background:#fef2f2; color:#b91c1c; }
-        .pk-ts.ts-wrapper { width:100%; }
-        .pk-ts .ts-control { min-height:38px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; padding:4px 10px; box-shadow:none; }
+        .pk-fld { position:relative; z-index:1; }
+        .pk-row:has(.ts-wrapper.dropdown-active) .pk-fld { z-index:20; }
+        .pk-row2:has(.ts-wrapper.dropdown-active) .pk-fld { z-index:20; }
+        .pk-ts.ts-wrapper { width:100%; background:#fff; }
+        .pk-ts .ts-control { min-height:38px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; padding:4px 10px; box-shadow:none; background:#fff; }
         .pk-ts.focus .ts-control { border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.15); }
-        .pk-ts .ts-dropdown { border:1px solid #d1d5db; border-radius:8px; font-size:13px; box-shadow:0 12px 32px rgba(15,23,42,.12); }
-        .pk-ts .ts-dropdown .option.active { background:#4f6ef7; color:#fff; }
-        .pk-ts .ts-dropdown .option:hover { background:#eef2ff; color:#312e81; }
-        .pk-ts .ts-dropdown input[type="text"] { font-size:13px; padding:8px 10px; }
+        /* Dropdown di-render ke body — pakai class pk-ts-dropdown, bukan .pk-ts .ts-dropdown */
+        .pk-ts-dropdown.ts-dropdown,
+        .pk-ts .ts-dropdown {
+            background:#fff !important;
+            border:1px solid #d1d5db;
+            border-radius:8px;
+            font-size:13px;
+            box-shadow:0 12px 32px rgba(15,23,42,.18);
+            z-index:10050 !important;
+            overflow:hidden;
+        }
+        .pk-ts-dropdown .ts-dropdown-content,
+        .pk-ts .ts-dropdown .ts-dropdown-content {
+            background:#fff !important;
+            max-height:280px;
+        }
+        .pk-ts-dropdown .dropdown-input-wrap,
+        .pk-ts .ts-dropdown .dropdown-input-wrap {
+            background:#fff;
+            border-bottom:1px solid #eef2f7;
+            padding:6px 8px;
+        }
+        .pk-ts-dropdown .dropdown-input,
+        .pk-ts .ts-dropdown .dropdown-input,
+        .pk-ts-dropdown input[type="text"],
+        .pk-ts .ts-dropdown input[type="text"] {
+            font-size:13px;
+            padding:8px 10px;
+            background:#fff !important;
+            border:1px solid #d1d5db;
+            border-radius:6px;
+        }
+        .pk-ts-dropdown .option,
+        .pk-ts .ts-dropdown .option {
+            background:#fff;
+            color:#111827;
+            padding:9px 12px;
+        }
+        .pk-ts-dropdown .option:hover,
+        .pk-ts .ts-dropdown .option:hover {
+            background:#eef2ff;
+            color:#312e81;
+        }
+        .pk-ts-dropdown .option.active,
+        .pk-ts .ts-dropdown .option.active {
+            background:#4f6ef7 !important;
+            color:#fff !important;
+        }
+        .pk-ts-dropdown .no-results,
+        .pk-ts-dropdown .create {
+            background:#fff;
+            padding:9px 12px;
+            color:#4b5563;
+        }
     </style>
 
     <div class="page-heading">
@@ -187,6 +240,7 @@
                 maxOptions: null,
                 plugins: ['dropdown_input'],
                 dropdownParent: 'body',
+                dropdownClass: 'pk-ts-dropdown',
                 render: {
                     option: function (data, escape) {
                         return '<div class="option">' + escape(data.text) + '</div>';
