@@ -99,8 +99,7 @@
                     </div>
                 </div>
                 <div class="rk-actions">
-                    <button type="button" class="rk-btn rk-btn-print" id="rkCetakRekapBtn">Export Rekap</button>
-                    <button type="button" class="rk-btn rk-btn-print" id="rkCetakRekapPdfBtn" title="Maks. 3.000 baris">Cetak PDF</button>
+                    <button type="button" class="rk-btn rk-btn-print" id="rkCetakRekapBtn">Cetak Rekap</button>
                     <button type="button" class="rk-btn rk-btn-print" id="rkCetakPerNisBtn">Cetak Per NIS</button>
                     <button type="button" class="rk-btn rk-btn-print" id="rkCetakKartuBtn">Cetak Kartu Siswa</button>
                     <a class="rk-btn" href="{{ route('keu.tagihan.rekap') }}">Reset</a>
@@ -113,8 +112,6 @@
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
                 <input type="hidden" name="has_search_context" value="{{ !empty($hasSearchRequest) ? '1' : '0' }}">
-                <input type="hidden" name="format" id="rkRekapFormat" value="auto">
-                <input type="hidden" name="rekap_total" value="{{ (int) ($rekapRows->total() ?? 0) }}">
             </form>
             <form id="rkFormKartu" method="POST" action="{{ route('keu.tagihan.data_print_kartu') }}" target="_blank" style="display:none;">
                 @csrf
@@ -213,14 +210,10 @@
     </div>
     <script>
         (function () {
-            const PDF_MAX = 3000;
-            const rekapTotal = {{ (int) ($rekapRows->total() ?? 0) }};
             const btnRekap = document.getElementById('rkCetakRekapBtn');
-            const btnRekapPdf = document.getElementById('rkCetakRekapPdfBtn');
             const btnKartu = document.getElementById('rkCetakKartuBtn');
             const btnPerNis = document.getElementById('rkCetakPerNisBtn');
             const formRekap = document.getElementById('rkFormRekap');
-            const inputRekapFormat = document.getElementById('rkRekapFormat');
             const formKartu = document.getElementById('rkFormKartu');
             const formPerNis = document.getElementById('rkFormPerNis');
             const inputKartu = document.getElementById('rkSelectedRowsKartu');
@@ -246,57 +239,28 @@
 
             function submitPrintForm(form, btn, label) {
                 if (!form) return;
-                const buttons = [btnRekap, btnRekapPdf, btnKartu, btnPerNis].filter(Boolean);
+                const buttons = [btnRekap, btnKartu, btnPerNis].filter(Boolean);
                 buttons.forEach(function (b) { b.disabled = true; });
                 if (btn) {
                     btn.dataset.prevLabel = btn.textContent;
                     btn.textContent = label || 'Memproses…';
                 }
                 form.submit();
-                const waitMs = (inputRekapFormat && inputRekapFormat.value !== 'pdf') ? 180000 : 12000;
                 window.setTimeout(function () {
                     buttons.forEach(function (b) { b.disabled = false; });
                     if (btn && btn.dataset.prevLabel) {
                         btn.textContent = btn.dataset.prevLabel;
                     }
-                }, waitMs);
-            }
-
-            function submitRekapForm(btn, format, label) {
-                if (!formRekap || !inputRekapFormat) return;
-                if (rowChecks.length === 0) {
-                    alert('Data masih kosong. Klik Cari dulu sebelum export rekap.');
-                    return;
-                }
-                if (format === 'pdf' && rekapTotal > PDF_MAX) {
-                    alert('Data ' + rekapTotal.toLocaleString('id-ID') + ' baris — terlalu banyak untuk PDF (maks. ' + PDF_MAX.toLocaleString('id-ID') + '). Gunakan Export Rekap (CSV).');
-                    return;
-                }
-                if (format === 'csv' && rekapTotal > PDF_MAX) {
-                    const ok = confirm(
-                        'Export ' + rekapTotal.toLocaleString('id-ID') + ' baris ke CSV (Excel).\n\nProses bisa memakan beberapa menit. Lanjutkan?'
-                    );
-                    if (!ok) return;
-                }
-                inputRekapFormat.value = format;
-                if (format === 'pdf') {
-                    formRekap.setAttribute('target', '_blank');
-                } else {
-                    formRekap.removeAttribute('target');
-                }
-                submitPrintForm(formRekap, btn, label);
+                }, 180000);
             }
 
             if (btnRekap && formRekap) {
                 btnRekap.addEventListener('click', function () {
-                    const format = rekapTotal > PDF_MAX ? 'csv' : 'auto';
-                    submitRekapForm(btnRekap, format, 'Mengekspor rekap…');
-                });
-            }
-
-            if (btnRekapPdf && formRekap) {
-                btnRekapPdf.addEventListener('click', function () {
-                    submitRekapForm(btnRekapPdf, 'pdf', 'Memproses PDF…');
+                    if (rowChecks.length === 0) {
+                        alert('Data masih kosong. Klik Cari dulu sebelum cetak rekap.');
+                        return;
+                    }
+                    submitPrintForm(formRekap, btnRekap, 'Mengekspor rekap…');
                 });
             }
 

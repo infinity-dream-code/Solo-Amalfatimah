@@ -257,8 +257,6 @@
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
                 <input type="hidden" name="has_search_context" value="1">
-                <input type="hidden" name="format" id="dtRekapFormat" value="auto">
-                <input type="hidden" name="rekap_total" value="{{ (int) ($tagihanRows->total() ?? 0) }}">
             </form>
 
             <div class="dt-table-wrap">
@@ -477,24 +475,6 @@
                         if (!thn || !kelas) {
                             alert('Cetak Rekap wajib pilih Tahun Akademik dan Kelas.');
                             return;
-                        }
-                        const fmtInput = document.getElementById('dtRekapFormat');
-                        const total = parseInt((formRekap.querySelector('input[name="rekap_total"]') || {}).value || '0', 10);
-                        const pdfMax = 3000;
-                        const useCsv = total > pdfMax;
-                        if (useCsv) {
-                            const ok = confirm(
-                                'Export ' + total.toLocaleString('id-ID') + ' baris ke CSV (Excel).\n\nProses bisa memakan beberapa menit. Lanjutkan?'
-                            );
-                            if (!ok) return;
-                        }
-                        if (fmtInput) {
-                            fmtInput.value = useCsv ? 'csv' : 'auto';
-                        }
-                        if (useCsv) {
-                            formRekap.removeAttribute('target');
-                        } else {
-                            formRekap.setAttribute('target', '_blank');
                         }
                         formRekap.submit();
                     });
