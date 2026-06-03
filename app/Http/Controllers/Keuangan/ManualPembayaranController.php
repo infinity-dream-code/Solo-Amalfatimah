@@ -239,7 +239,7 @@ class ManualPembayaranController extends Controller
 
         return [
             'cid' => (int) ($s['custid'] ?? 0),
-            'label' => $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust, $angkatan),
+            'label' => $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust),
             'nocust' => $nocust,
             'nis' => trim((string) ($s['nis'] ?? '')),
             'nis_like' => $nisLike,
@@ -257,10 +257,9 @@ class ManualPembayaranController extends Controller
         $nocust = trim((string) ($s['NOCUST'] ?? $s['nocust'] ?? ''));
         $nmcust = trim((string) ($s['NMCUST'] ?? $s['nmcust'] ?? ''));
         $num2nd = trim((string) ($s['NUM2ND'] ?? $s['num2nd'] ?? ''));
-        $angkatan = trim((string) ($s['DESC04'] ?? $s['desc04'] ?? ''));
         $nisLike = $nocust !== '' ? $nocust : trim((string) ($s['nis'] ?? ''));
 
-        return $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust, $angkatan);
+        return $this->formatSiswaPartsLabel($mode, $nisLike, $num2nd, $nocust, $nmcust);
     }
 
     private function formatSiswaPartsLabel(
@@ -268,17 +267,22 @@ class ManualPembayaranController extends Controller
         string $nisLike,
         string $num2nd,
         string $nocust,
-        string $nmcust,
-        string $angkatan
+        string $nmcust
     ): string {
-        if ($mode === self::MODE_NIS) {
-            $lead = $nisLike !== '' ? $nisLike : ($nocust !== '' ? $nocust : '—');
-        } elseif ($mode === self::MODE_NON_SISWA) {
-            $lead = $num2nd !== '' ? $num2nd : '—';
-        } else {
-            $lead = $num2nd !== '' ? $num2nd : ($nisLike !== '' ? $nisLike : ($nocust !== '' ? $nocust : '—'));
+        if ($mode === self::MODE_NON_SISWA) {
+            $id = $num2nd !== '' ? $num2nd : '—';
+
+            return $nmcust !== '' ? $id . ' - ' . $nmcust : $id;
         }
 
-        return trim($lead . ' - ' . $nmcust . ' - ' . $angkatan, ' -');
+        $nis = $nocust !== '' ? $nocust : ($nisLike !== '' ? $nisLike : '');
+        if ($nis === '' && $mode === self::MODE_PENDAFTARAN && $num2nd !== '') {
+            $nis = $num2nd;
+        }
+        if ($nis === '') {
+            return $nmcust !== '' ? $nmcust : '—';
+        }
+
+        return $nmcust !== '' ? $nis . ' - ' . $nmcust : $nis;
     }
 }
