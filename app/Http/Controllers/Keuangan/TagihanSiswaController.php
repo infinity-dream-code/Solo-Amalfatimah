@@ -923,133 +923,207 @@ XML);
         return $pdf->stream('kartu-siswa-' . date('Ymd-His') . '.pdf');
     }
 
-    public function dataPrintRekap(Request $request, AmalFatimahApiService $api): StreamedResponse|RedirectResponse
+    public function dataPrintRekap(Request $request, AmalFatimahApiService $api): JsonResponse|RedirectResponse
     {
         $hasSearchContext = trim((string) $request->input('has_search_context', '')) === '1';
         if (!$hasSearchContext) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'message' => 'Data masih kosong. Klik Cari dulu sebelum cetak rekap.'], 422);
+            }
+
             return redirect()->back()->with('export_error', 'Data masih kosong. Klik Cari dulu sebelum cetak rekap.');
         }
 
-        $filters = $this->validatedDataTagihanFiltersFromRequest($request);
+        set_time_limit(900);
+        @ini_set('memory_limit', '512M');
 
-        return $this->streamRekapTagihanCsv($api, $filters);
+        $filters = $this->validatedDataTagihanFiltersFromRequest($request);
+        $rawRows = $this->fetchTagihanRekapMatrixRows($api, $filters);
+        if ($rawRows === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'message' => 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.'], 422);
+            }
+
+            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
+        }
+        if ($rawRows === []) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'message' => 'Tidak ada data yang cocok untuk cetak rekap.'], 422);
+            }
+
+            return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk cetak rekap.');
+        }
+
+        $matrix = $this->buildRekapTagihanMatrix($rawRows);
+        if ($matrix === null) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'message' => 'Tidak ada nominal tagihan untuk dicetak.'], 422);
+            }
+
+            return redirect()->back()->with('export_error', 'Tidak ada nominal tagihan untuk dicetak.');
+        }
+
+        $filterOptions = $api->getFilterBuatTagihan();
+        $meta = $this->rekapTagihanExportMeta($filters, is_array($filterOptions) ? $filterOptions : []);
+
+        return response()->json([
+            'ok' => true,
+            'matrix' => $matrix,
+            'meta' => $meta,
+        ]);
     }
 
     /**
      * @param array<string, string> $filters
+     * @return list<array<string, mixed>>|null
      */
-    private function streamRekapTagihanCsv(AmalFatimahApiService $api, array $filters): StreamedResponse|RedirectResponse
+    private function fetchTagihanRekapMatrixRows(AmalFatimahApiService $api, array $filters): ?array
     {
-        $preflight = $api->getDataTagihan($filters, 1, 0, true, [], true);
-        if (!$preflight['ok']) {
-            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
+        $chunk = self::REKAP_EXPORT_CHUNK;
+        $maxRows = self::REKAP_EXPORT_MAX_ROWS;
+        $all = [];
+        $offset = 0;
+        $maxLoops = (int) ceil($maxRows / $chunk) + 2;
+
+        for ($loop = 0; $loop < $maxLoops && count($all) < $maxRows; $loop++) {
+            $res = $api->getTagihanRekapMatrix($filters, $chunk, $offset);
+            if (!$res['ok']) {
+                return null;
+            }
+            $rows = $res['data']['rows'] ?? [];
+            if (!is_array($rows) || $rows === []) {
+                break;
+            }
+            foreach ($rows as $r) {
+                $all[] = $r;
+                if (count($all) >= $maxRows) {
+                    break 2;
+                }
+            }
+            if (!($res['data']['has_more'] ?? false) || count($rows) < $chunk) {
+                break;
+            }
+            $offset += count($rows);
         }
-        $preflightRows = $preflight['data']['rows'] ?? [];
-        if (!is_array($preflightRows) || $preflightRows === []) {
-            return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk export rekap.');
+
+        return $all;
+    }
+
+    /**
+     * Pivot matrix cetak rekap (format solo_nurhidayah).
+     *
+     * @param list<array<string, mixed>> $data
+     * @return array{kelasOrder: list<string>, kelompokOrder: list<string>, rows: list<array<string, mixed>>}|null
+     */
+    private function buildRekapTagihanMatrix(array $data): ?array
+    {
+        if ($data === []) {
+            return null;
         }
 
-        $filename = 'rekap-tagihan-' . date('Ymd-His') . '.csv';
+        $kelasOrder = [];
+        $kelasSet = [];
+        $kelompokOrder = [];
+        $kelompokSet = [];
+        $rowMap = [];
 
-        return response()->streamDownload(function () use ($api, $filters) {
-            set_time_limit(900);
-            @ini_set('memory_limit', '512M');
-
-            $h = fopen('php://output', 'w');
-            if ($h === false) {
-                return;
+        foreach ($data as $row) {
+            if (!is_array($row)) {
+                continue;
             }
-            fprintf($h, chr(0xEF) . chr(0xBB) . chr(0xBF));
-            fputcsv($h, ['No', 'NIS', 'Nama', 'Nama Tagihan', 'Tahun AKA', 'Tagihan (Rp)'], ';');
-
-            $no = 1;
-            $offset = 0;
-            $maxRows = self::REKAP_EXPORT_MAX_ROWS;
-            $chunk = self::REKAP_EXPORT_CHUNK;
-            $firstRowKey = null;
-
-            $writeBatch = static function (array $rows) use ($h, &$no, $maxRows): int {
-                $written = 0;
-                foreach ($rows as $r) {
-                    if (!is_array($r) || $no > $maxRows) {
-                        break;
-                    }
-                    fputcsv($h, [
-                        $no,
-                        trim((string) ($r['nis'] ?? '')),
-                        trim((string) ($r['nama'] ?? '')),
-                        trim((string) ($r['nama_tagihan'] ?? '')),
-                        trim((string) ($r['tahun_aka'] ?? '')),
-                        (int) ($r['tagihan'] ?? 0),
-                    ], ';');
-                    $no++;
-                    $written++;
-                }
-
-                return $written;
-            };
-
-            $rowKey = static function (array $r): string {
-                return trim((string) ($r['nis'] ?? '')) . '|'
-                    . trim((string) ($r['nama_tagihan'] ?? '')) . '|'
-                    . trim((string) ($r['tahun_aka'] ?? '')) . '|'
-                    . (int) ($r['tagihan'] ?? 0);
-            };
-
-            // Coba ambil sekaligus sampai 50k (bulk_export di ws.php).
-            $bulkRes = $api->getTagihanRekapCetak($filters, $maxRows);
-            if ($bulkRes['ok']) {
-                $bulkRows = $bulkRes['data']['rows'] ?? [];
-                if (is_array($bulkRows) && $bulkRows !== []) {
-                    if ($firstRowKey === null && isset($bulkRows[0]) && is_array($bulkRows[0])) {
-                        $firstRowKey = $rowKey($bulkRows[0]);
-                    }
-                    $written = $writeBatch($bulkRows);
-                    $offset += $written;
-                    if ($written < $chunk || $offset >= $maxRows) {
-                        fclose($h);
-
-                        return;
-                    }
-                }
+            $kelasLabel = trim((string) ($row['unit'] ?? '-'));
+            if ($kelasLabel === '') {
+                $kelasLabel = '-';
+            }
+            $kelompok = trim((string) ($row['kelompok'] ?? ''));
+            if ($kelompok === '') {
+                $kelompok = 'Reguler';
+            }
+            if (!isset($kelasSet[$kelasLabel])) {
+                $kelasSet[$kelasLabel] = true;
+                $kelasOrder[] = $kelasLabel;
+            }
+            if (!isset($kelompokSet[$kelompok])) {
+                $kelompokSet[$kelompok] = true;
+                $kelompokOrder[] = $kelompok;
             }
 
-            // Lanjut per chunk jika bulk mentok di 5k (ws lama) atau ada sisa data.
-            while ($offset < $maxRows) {
-                $res = $api->getDataTagihan($filters, $chunk, $offset, true, [], true);
-                if (!$res['ok']) {
-                    break;
-                }
-                $rows = $res['data']['rows'] ?? [];
-                if (!is_array($rows) || $rows === []) {
-                    break;
-                }
-
-                if ($offset > 0 && isset($rows[0]) && is_array($rows[0]) && $firstRowKey !== null) {
-                    if ($rowKey($rows[0]) === $firstRowKey) {
-                        break;
-                    }
-                }
-
-                $written = $writeBatch($rows);
-                if ($written === 0) {
-                    break;
-                }
-                $offset += $written;
-
-                if ($written < $chunk) {
-                    break;
-                }
-
-                if (function_exists('flush')) {
-                    flush();
-                }
+            $tahun = trim((string) ($row['bta'] ?? '-'));
+            $kode = trim((string) ($row['kode_post'] ?? '-'));
+            $nama = trim((string) ($row['nama_tagihan'] ?? '-'));
+            $val = (int) ($row['billam'] ?? 0);
+            if ($val === 0) {
+                continue;
             }
 
-            fclose($h);
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+            $mapKey = $tahun . '||' . $kode . '||' . $nama;
+            if (!isset($rowMap[$mapKey])) {
+                $rowMap[$mapKey] = [
+                    'tahun' => $tahun,
+                    'kode' => $kode,
+                    'nama' => $nama,
+                    'byClass' => [],
+                    'total' => 0,
+                ];
+            }
+            if (!isset($rowMap[$mapKey]['byClass'][$kelasLabel])) {
+                $rowMap[$mapKey]['byClass'][$kelasLabel] = [];
+            }
+            if (!isset($rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok])) {
+                $rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok] = 0;
+            }
+            $rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok] += $val;
+            $rowMap[$mapKey]['total'] += $val;
+        }
+
+        $rows = array_values($rowMap);
+        usort($rows, static function (array $a, array $b): int {
+            if ($a['tahun'] !== $b['tahun']) {
+                return strcmp((string) $a['tahun'], (string) $b['tahun']);
+            }
+
+            return strcmp((string) $a['kode'], (string) $b['kode']);
+        });
+
+        if ($rows === []) {
+            return null;
+        }
+
+        return [
+            'kelasOrder' => $kelasOrder,
+            'kelompokOrder' => $kelompokOrder,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * @param array<string, string> $filters
+     * @param array<string, mixed> $filterOptions
+     * @return array<string, string>
+     */
+    private function rekapTagihanExportMeta(array $filters, array $filterOptions): array
+    {
+        $kelasLabel = 'Semua';
+        $kelasId = trim((string) ($filters['kelas_id'] ?? ''));
+        foreach ($filterOptions['kelas'] ?? [] as $k) {
+            if (!is_array($k)) {
+                continue;
+            }
+            if ((string) ($k['id'] ?? '') === $kelasId) {
+                $kelasLabel = trim((string) (($k['unit'] ?? '') . ' - ' . ($k['kelas'] ?? '')));
+                break;
+            }
+        }
+
+        return [
+            'sekolah' => 'Semua',
+            'tahun_pelajaran' => trim((string) ($filters['thn_akademik'] ?? '')) ?: 'Semua',
+            'periode_mulai' => '-',
+            'periode_akhir' => '-',
+            'dari_tanggal' => trim((string) ($filters['tgl_dari'] ?? '')) ?: '-',
+            'sampai_tanggal' => trim((string) ($filters['tgl_sampai'] ?? '')) ?: '-',
+            'kelas' => $kelasLabel,
+        ];
     }
 
     /**

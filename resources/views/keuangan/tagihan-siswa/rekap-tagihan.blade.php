@@ -208,8 +208,11 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script>
         (function () {
+            const rekapExportUrl = @json(route('keu.tagihan.data_print_rekap'));
+            const csrfToken = @json(csrf_token());
             const btnRekap = document.getElementById('rkCetakRekapBtn');
             const btnKartu = document.getElementById('rkCetakKartuBtn');
             const btnPerNis = document.getElementById('rkCetakPerNisBtn');
@@ -237,6 +240,148 @@
                 return Object.keys(bucket).map(function (k) { return parseInt(k, 10); });
             }
 
+            function parseIsoDate(str) {
+                if (!str || str === '-') return '-';
+                const parts = String(str).split('-');
+                if (parts.length !== 3) return str;
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12);
+                return isNaN(d.getTime()) ? str : d;
+            }
+
+            function fullBorder() {
+                return {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            }
+
+            function cellBGColor() {
+                return {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFEBE1FF' }
+                };
+            }
+
+            async function exportRekapTagihanExcel(matrix, meta) {
+                if (!matrix || !matrix.rows || matrix.rows.length === 0 || typeof ExcelJS === 'undefined') return;
+                const wbTitle = 'REKAP TAGIHAN';
+                const wb = new ExcelJS.Workbook();
+                const ws = wb.addWorksheet(wbTitle);
+                const rows = matrix.rows;
+                const kelasOrder = matrix.kelasOrder || [];
+                const kelompokOrder = matrix.kelompokOrder || [];
+                meta = meta || {};
+
+                ws.insertRow(1, [wbTitle]);
+                ws.insertRow(2, ['Sekolah', meta.sekolah || 'Semua']);
+                ws.insertRow(3, ['Tahun Pelajaran', meta.tahun_pelajaran || 'Semua']);
+                ws.insertRow(4, ['Periode Mulai', meta.periode_mulai || '-']);
+                ws.insertRow(5, ['Periode Akhir', meta.periode_akhir || '-']);
+                ws.insertRow(6, ['Dari Tanggal', parseIsoDate(meta.dari_tanggal || '-')]);
+                ws.insertRow(7, ['Sampai Tanggal', parseIsoDate(meta.sampai_tanggal || '-')]);
+
+                [6, 7].forEach(function (rowNumber) {
+                    const cell = ws.getRow(rowNumber).getCell(2);
+                    if (cell.value instanceof Date) cell.numFmt = 'dddd, dd mmmm yyyy';
+                });
+                [1, 2, 3, 4, 5, 6, 7].forEach(function (rowNumber) {
+                    ws.getRow(rowNumber).eachCell({ includeEmpty: true }, function (cell) { cell.font = { bold: true }; });
+                });
+
+                ws.insertRow(9, []);
+                const headerRow1Number = 10;
+                const headerRow1 = ws.getRow(headerRow1Number);
+                const headerRow2 = ws.getRow(headerRow1Number + 1);
+
+                let col = 1;
+                headerRow1.getCell(col).value = 'Thn Akademik'; ws.mergeCells(headerRow1Number, col, headerRow1Number + 1, col); col++;
+                headerRow1.getCell(col).value = 'Kode'; ws.mergeCells(headerRow1Number, col, headerRow1Number + 1, col); col++;
+                headerRow1.getCell(col).value = 'Nama'; ws.mergeCells(headerRow1Number, col, headerRow1Number + 1, col); col++;
+
+                kelasOrder.forEach(function (kelas) {
+                    const startCol = col;
+                    kelompokOrder.forEach(function (k) {
+                        headerRow2.getCell(col).value = k;
+                        col++;
+                    });
+                    headerRow2.getCell(col).value = 'Sum';
+                    const endCol = col;
+                    ws.mergeCells(headerRow1Number, startCol, headerRow1Number, endCol);
+                    headerRow1.getCell(startCol).value = kelas;
+                    col++;
+                });
+
+                headerRow1.getCell(col).value = 'Total';
+                ws.mergeCells(headerRow1Number, col, headerRow1Number + 1, col);
+                const lastCol = col;
+
+                for (let i = 1; i <= lastCol; i++) {
+                    ws.getColumn(i).width = i <= 3 ? [12, 10, 26][i - 1] : 14;
+                    [headerRow1, headerRow2].forEach(function (r) {
+                        const cell = r.getCell(i);
+                        cell.font = { bold: true };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = fullBorder();
+                        cell.fill = cellBGColor();
+                    });
+                }
+
+                const dataStartRow = headerRow1Number + 2;
+                let currentRow = dataStartRow;
+                rows.forEach(function (r, idx) {
+                    const row = ws.getRow(currentRow);
+                    row.getCell(1).value = idx === 0 ? (r.tahun || '') : '';
+                    row.getCell(2).value = r.kode;
+                    row.getCell(3).value = r.nama;
+                    let c = 4;
+                    kelasOrder.forEach(function (kelas) {
+                        let subtotalKelas = 0;
+                        kelompokOrder.forEach(function (k) {
+                            const val = Number((r.byClass && r.byClass[kelas] && r.byClass[kelas][k]) || 0);
+                            subtotalKelas += val;
+                            row.getCell(c).value = val;
+                            row.getCell(c).numFmt = '#,##0';
+                            row.getCell(c).alignment = { horizontal: 'right' };
+                            c++;
+                        });
+                        row.getCell(c).value = subtotalKelas;
+                        row.getCell(c).numFmt = '#,##0';
+                        row.getCell(c).alignment = { horizontal: 'right' };
+                        c++;
+                    });
+                    row.getCell(c).value = Number(r.total || 0);
+                    row.getCell(c).numFmt = '#,##0';
+                    row.getCell(c).alignment = { horizontal: 'right' };
+                    for (let i = 1; i <= lastCol; i++) row.getCell(i).border = fullBorder();
+                    currentRow++;
+                });
+
+                const totalRow = ws.getRow(currentRow);
+                totalRow.getCell(3).value = 'Total';
+                totalRow.getCell(3).font = { bold: true };
+                for (let i = 4; i <= lastCol; i++) {
+                    const colLetter = ws.getColumn(i).letter;
+                    totalRow.getCell(i).value = { formula: 'SUM(' + colLetter + dataStartRow + ':' + colLetter + (currentRow - 1) + ')' };
+                    totalRow.getCell(i).numFmt = '#,##0';
+                    totalRow.getCell(i).font = { bold: true };
+                    totalRow.getCell(i).alignment = { horizontal: 'right' };
+                }
+                for (let i = 1; i <= lastCol; i++) {
+                    totalRow.getCell(i).border = fullBorder();
+                    totalRow.getCell(i).fill = cellBGColor();
+                }
+
+                const buffer = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = wbTitle + '.xlsx';
+                a.click();
+            }
+
             function submitPrintForm(form, btn, label) {
                 if (!form) return;
                 const buttons = [btnRekap, btnKartu, btnPerNis].filter(Boolean);
@@ -255,12 +400,42 @@
             }
 
             if (btnRekap && formRekap) {
-                btnRekap.addEventListener('click', function () {
+                btnRekap.addEventListener('click', async function () {
                     if (rowChecks.length === 0) {
                         alert('Data masih kosong. Klik Cari dulu sebelum cetak rekap.');
                         return;
                     }
-                    submitPrintForm(formRekap, btnRekap, 'Mengekspor rekap…');
+                    const buttons = [btnRekap, btnKartu, btnPerNis].filter(Boolean);
+                    buttons.forEach(function (b) { b.disabled = true; });
+                    btnRekap.dataset.prevLabel = btnRekap.textContent;
+                    btnRekap.textContent = 'Mengekspor rekap…';
+
+                    const body = new FormData(formRekap);
+                    try {
+                        const res = await fetch(rekapExportUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: body,
+                            credentials: 'same-origin'
+                        });
+                        const json = await res.json().catch(function () { return {}; });
+                        if (!res.ok || !json.ok) {
+                            alert(json.message || 'Gagal mengekspor rekap tagihan.');
+                            return;
+                        }
+                        await exportRekapTagihanExcel(json.matrix, json.meta);
+                    } catch (e) {
+                        alert('Gagal mengekspor rekap tagihan. Pastikan ws.php terbaru sudah di-upload.');
+                    } finally {
+                        buttons.forEach(function (b) { b.disabled = false; });
+                        if (btnRekap.dataset.prevLabel) {
+                            btnRekap.textContent = btnRekap.dataset.prevLabel;
+                        }
+                    }
                 });
             }
 

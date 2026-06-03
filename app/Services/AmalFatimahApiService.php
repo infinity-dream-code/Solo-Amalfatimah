@@ -1800,6 +1800,70 @@ class AmalFatimahApiService
     }
 
     /**
+     * Baris sumber matrix cetak rekap (scctbill_detail, belum lunas).
+     *
+     * @param array<string, mixed> $filters
+     * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>, has_more: bool}}
+     */
+    public function getTagihanRekapMatrix(array $filters, int $limit, int $offset): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getTagihanRekapMatrix', 'rnd' => uniqid()], $jwtKey);
+
+        $body = array_merge([
+            'method' => 'getTagihanRekapMatrix',
+            'token' => $token,
+            'limit' => $limit,
+            'offset' => $offset,
+        ], array_filter([
+            'tgl_dari' => trim((string) ($filters['tgl_dari'] ?? '')),
+            'tgl_sampai' => trim((string) ($filters['tgl_sampai'] ?? '')),
+            'thn_angkatan' => trim((string) ($filters['thn_angkatan'] ?? '')),
+            'thn_akademik' => trim((string) ($filters['thn_akademik'] ?? '')),
+            'kelas_id' => trim((string) ($filters['kelas_id'] ?? '')),
+            'nama_tagihan' => trim((string) ($filters['nama_tagihan'] ?? '')),
+            'siswa' => trim((string) ($filters['siswa'] ?? '')),
+            'sort_urutan' => trim((string) ($filters['sort_urutan'] ?? '')),
+        ], static fn ($v) => $v !== ''));
+
+        try {
+            $response = Http::timeout(300)->post($url, $body);
+            $json = $response->json();
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'ok' => false,
+                    'message' => (string) ($json['message'] ?? 'Gagal memuat data matrix rekap tagihan'),
+                    'data' => ['rows' => [], 'has_more' => false],
+                ];
+            }
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+            $rowList = is_array($data['rows'] ?? null) ? array_values($data['rows']) : [];
+            $hasMore = (bool) ($data['has_more'] ?? false);
+            if (!$hasMore && count($rowList) >= $limit) {
+                $hasMore = true;
+            }
+
+            return [
+                'ok' => true,
+                'message' => '',
+                'data' => [
+                    'rows' => $rowList,
+                    'has_more' => $hasMore,
+                ],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getTagihanRekapMatrix: ' . $e->getMessage());
+
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi layanan',
+                'data' => ['rows' => [], 'has_more' => false],
+            ];
+        }
+    }
+
+    /**
      * Satu panggilan WS untuk cetak kartu siswa (filter CUSTID terpilih).
      *
      * @param list<int> $custids

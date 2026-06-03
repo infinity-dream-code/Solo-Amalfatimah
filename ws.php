@@ -3715,6 +3715,145 @@ function getTagihanRekapCetak(array $req): array
 }
 
 /**
+ * Sumber matrix cetak rekap tagihan (scctbill_detail × siswa), belum lunas saja.
+ * Kolom: bta, kode_post, nama_tagihan, unit (CODE02), kelompok (DESC03), billam.
+ *
+ * @return array{rows: array<int, array<string, mixed>>, has_more: bool}
+ */
+function getTagihanRekapMatrix(array $req): array
+{
+    $pdo = dbConnectPdo();
+    $detailCustCol = detectScctbillDetailCustColumn($pdo);
+
+    $tglDari = trim((string) ($req['tgl_dari'] ?? ''));
+    $tglSampai = trim((string) ($req['tgl_sampai'] ?? ''));
+    $thnAngkatan = trim((string) ($req['thn_angkatan'] ?? ''));
+    $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
+    $kelasId = trim((string) ($req['kelas_id'] ?? ''));
+    $namaTagihan = trim((string) ($req['nama_tagihan'] ?? ''));
+    $siswa = trim((string) ($req['siswa'] ?? ''));
+    $sortUrutan = strtolower(trim((string) ($req['sort_urutan'] ?? 'asc')));
+    if (!in_array($sortUrutan, ['asc', 'desc'], true)) {
+        $sortUrutan = 'asc';
+    }
+    $thnAngkatanBase = trim((string) preg_replace('/\s*-\s*.*/', '', $thnAngkatan));
+
+    $where = [
+        'b.FSTSBolehBayar = 1',
+        "(b.PAIDST = '0' OR b.PAIDST = 0 OR TRIM(CAST(b.PAIDST AS CHAR)) = '0')",
+        'd.KodePost IS NOT NULL',
+        "TRIM(d.KodePost) <> ''",
+        "TRIM(CAST(c.STCUST AS CHAR)) = '1'",
+    ];
+    $params = [];
+
+    $dDari = penerimaanParseYmd($tglDari);
+    $dSampai = penerimaanParseYmd($tglSampai);
+    if ($tglDari !== '' && $tglSampai !== '' && $dDari && $dSampai) {
+        $where[] = 'b.FTGLTagihan >= :tg_start AND b.FTGLTagihan < :tg_end_excl';
+        $params[':tg_start'] = $dDari->format('Y-m-d H:i:s');
+        $params[':tg_end_excl'] = $dSampai->modify('+1 day')->format('Y-m-d H:i:s');
+    } elseif ($tglDari !== '' && $dDari) {
+        $where[] = 'b.FTGLTagihan >= :tg_start';
+        $params[':tg_start'] = $dDari->format('Y-m-d H:i:s');
+    } elseif ($tglSampai !== '' && $dSampai) {
+        $where[] = 'b.FTGLTagihan < :tg_end_excl';
+        $params[':tg_end_excl'] = $dSampai->modify('+1 day')->format('Y-m-d H:i:s');
+    } elseif ($tglDari !== '' && $tglSampai !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) BETWEEN :tg_dari AND :tg_sampai';
+        $params[':tg_dari'] = $tglDari;
+        $params[':tg_sampai'] = $tglSampai;
+    } elseif ($tglDari !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) >= :tg_dari';
+        $params[':tg_dari'] = $tglDari;
+    } elseif ($tglSampai !== '') {
+        $where[] = 'DATE(b.FTGLTagihan) <= :tg_sampai';
+        $params[':tg_sampai'] = $tglSampai;
+    }
+
+    if ($thnAkademik !== '') {
+        $where[] = '(
+            UPPER(TRIM(b.BTA)) = UPPER(TRIM(:bta))
+            OR UPPER(TRIM(b.BTA)) LIKE CONCAT(UPPER(TRIM(:bta_like)), "%")
+            OR LEFT(TRIM(b.BTA), 4) = LEFT(TRIM(:bta_yr), 4)
+        )';
+        $params[':bta'] = $thnAkademik;
+        $params[':bta_like'] = $thnAkademik;
+        $params[':bta_yr'] = $thnAkademik;
+    }
+
+    if ($namaTagihan !== '') {
+        $where[] = 'UPPER(TRIM(b.BILLNM)) = UPPER(TRIM(:billnm))';
+        $params[':billnm'] = $namaTagihan;
+    }
+
+    if ($thnAngkatan !== '') {
+        $where[] = '(TRIM(c.DESC04) = :thn_ang OR TRIM(c.DESC04) = :thn_ang_base)';
+        $params[':thn_ang'] = $thnAngkatan;
+        $params[':thn_ang_base'] = $thnAngkatanBase !== '' ? $thnAngkatanBase : $thnAngkatan;
+    }
+
+    if ($kelasId !== '') {
+        $where[] = 'c.CODE03 = :kelas_id';
+        $params[':kelas_id'] = $kelasId;
+    }
+
+    if ($siswa !== '') {
+        $sLike = '%' . $siswa . '%';
+        $where[] = '(
+            TRIM(c.NOCUST) LIKE :siswa_nis
+            OR TRIM(c.NUM2ND) LIKE :siswa_daftar
+            OR TRIM(c.NMCUST) LIKE :siswa_nama
+        )';
+        $params[':siswa_nis'] = $sLike;
+        $params[':siswa_daftar'] = $sLike;
+        $params[':siswa_nama'] = $sLike;
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $maxCap = 5000;
+    $limit = min(max((int) ($req['limit'] ?? 5000), 1), $maxCap);
+    $offset = max((int) ($req['offset'] ?? 0), 0);
+    $sqlLimit = min($maxCap, $limit + 1);
+
+    $sql = "
+        SELECT
+            TRIM(b.BTA) AS bta,
+            TRIM(d.KodePost) AS kode_post,
+            TRIM(b.BILLNM) AS nama_tagihan,
+            TRIM(c.CODE02) AS unit,
+            TRIM(c.DESC03) AS kelompok,
+            COALESCE(d.BILLAM, 0) AS billam
+        FROM scctbill_detail d
+        INNER JOIN scctbill b ON b.BILLCD = d.BILLCD AND b.CUSTID = d.{$detailCustCol}
+        INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
+        WHERE {$whereSql}
+        ORDER BY TRIM(b.BTA) ASC, TRIM(d.KodePost) ASC, TRIM(b.BILLNM) ASC, TRIM(c.CODE02) ASC, TRIM(c.DESC03) ASC
+        LIMIT :limit OFFSET :offset
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $k => $v) {
+        $stmt->bindValue($k, $v, PDO::PARAM_STR);
+    }
+    $stmt->bindValue(':limit', $sqlLimit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $hasMore = false;
+    if (count($rows) > $limit) {
+        array_pop($rows);
+        $hasMore = true;
+    }
+
+    return [
+        'rows' => $rows,
+        'has_more' => $hasMore,
+    ];
+}
+
+/**
  * Data penerimaan (tagihan lunas) untuk halaman Data Penerimaan.
  * Pagination: LIMIT/OFFSET; urutan: PAIDDT DESC (tanggal bayar).
  * include_total=0: tanpa COUNT(*) (hemat waktu pada dataset besar); ambil limit+1 baris agar client tahu ada halaman berikutnya.
@@ -6779,6 +6918,17 @@ try {
         echo json_encode([
             'status' => 200,
             'method' => 'getTagihanRekapCetak',
+            'data'   => $data,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === 'getTagihanRekapMatrix') {
+        $data = getTagihanRekapMatrix($req);
+        http_response_code(200);
+        echo json_encode([
+            'status' => 200,
+            'method' => 'getTagihanRekapMatrix',
             'data'   => $data,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
