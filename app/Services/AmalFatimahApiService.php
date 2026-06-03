@@ -1737,6 +1737,131 @@ class AmalFatimahApiService
     }
 
     /**
+     * Satu panggilan WS untuk cetak rekap tagihan (semua baris sesuai filter, maks 5000).
+     *
+     * @param array<string, mixed> $filters
+     * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>}}
+     */
+    public function getTagihanRekapCetak(array $filters, int $maxRows = 5000): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getTagihanRekapCetak', 'rnd' => uniqid()], $jwtKey);
+
+        $body = array_merge([
+            'method' => 'getTagihanRekapCetak',
+            'token' => $token,
+            'limit' => min(max($maxRows, 1), 5000),
+        ], array_filter([
+            'tgl_dari' => trim((string) ($filters['tgl_dari'] ?? '')),
+            'tgl_sampai' => trim((string) ($filters['tgl_sampai'] ?? '')),
+            'thn_angkatan' => trim((string) ($filters['thn_angkatan'] ?? '')),
+            'thn_akademik' => trim((string) ($filters['thn_akademik'] ?? '')),
+            'kelas_id' => trim((string) ($filters['kelas_id'] ?? '')),
+            'nama_tagihan' => trim((string) ($filters['nama_tagihan'] ?? '')),
+            'siswa' => trim((string) ($filters['siswa'] ?? '')),
+            'sort_urutan' => trim((string) ($filters['sort_urutan'] ?? '')),
+        ], static fn ($v) => $v !== ''));
+
+        try {
+            $response = Http::timeout(120)->post($url, $body);
+            $json = $response->json();
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'ok' => false,
+                    'message' => (string) ($json['message'] ?? 'Gagal memuat data rekap tagihan'),
+                    'data' => ['rows' => []],
+                ];
+            }
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+
+            return [
+                'ok' => true,
+                'message' => '',
+                'data' => [
+                    'rows' => is_array($data['rows'] ?? null) ? array_values($data['rows']) : [],
+                ],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getTagihanRekapCetak: ' . $e->getMessage());
+
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi layanan',
+                'data' => ['rows' => []],
+            ];
+        }
+    }
+
+    /**
+     * Satu panggilan WS untuk cetak kartu siswa (filter CUSTID terpilih).
+     *
+     * @param list<int> $custids
+     * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>}}
+     */
+    public function getTagihanKartuSiswa(array $custids, string $thnAkademik = ''): array
+    {
+        $custidNums = [];
+        foreach ($custids as $v) {
+            $n = (int) $v;
+            if ($n > 0) {
+                $custidNums[] = $n;
+            }
+        }
+        $custidNums = array_values(array_unique($custidNums));
+        if ($custidNums === []) {
+            return [
+                'ok' => false,
+                'message' => 'Daftar siswa kosong',
+                'data' => ['rows' => []],
+            ];
+        }
+
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getTagihanKartuSiswa', 'rnd' => uniqid()], $jwtKey);
+
+        $body = [
+            'method' => 'getTagihanKartuSiswa',
+            'token' => $token,
+            'custids' => $custidNums,
+        ];
+        $thnAkademik = trim($thnAkademik);
+        if ($thnAkademik !== '') {
+            $body['thn_akademik'] = $thnAkademik;
+        }
+
+        try {
+            $response = Http::timeout(90)->post($url, $body);
+            $json = $response->json();
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'ok' => false,
+                    'message' => (string) ($json['message'] ?? 'Gagal memuat tagihan kartu siswa'),
+                    'data' => ['rows' => []],
+                ];
+            }
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+
+            return [
+                'ok' => true,
+                'message' => '',
+                'data' => [
+                    'rows' => is_array($data['rows'] ?? null) ? array_values($data['rows']) : [],
+                ],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getTagihanKartuSiswa: ' . $e->getMessage());
+
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi layanan',
+                'data' => ['rows' => []],
+            ];
+        }
+    }
+
+    /**
      * @param array<string, mixed> $filters
      * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>, total: int}}
      */

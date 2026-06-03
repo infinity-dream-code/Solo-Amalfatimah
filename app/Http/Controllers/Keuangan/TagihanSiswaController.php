@@ -892,58 +892,24 @@ XML);
 
     public function dataPrintKartu(Request $request, AmalFatimahApiService $api): \Illuminate\Http\Response|RedirectResponse
     {
-        $filters = $this->validatedDataTagihanFiltersFromRequest($request);
         $selectedCustIds = $this->selectedCustIdsFromRequest($request);
         if ($selectedCustIds === []) {
-            return redirect()->back()->with('export_error', 'Pilih minimal 1 siswa untuk Cetak Kartu Siswa.');
+            return redirect()->back()->with('export_error', 'Pilih minimal 1 siswa (centang kiri tabel) untuk Cetak Kartu Siswa.');
         }
 
-        // Kartu siswa harus memuat semua tagihan milik siswa terpilih.
-        // Abaikan filter nama_tagihan agar tidak hanya 1 bulan/tagihan saja.
-        $filtersForKartu = $filters;
-        $filtersForKartu['nama_tagihan'] = '';
-
-        $rawRows = $this->fetchAllDataTagihanRowsForExport($api, $filtersForKartu, 5000, $selectedCustIds);
+        $rawRows = $this->fetchTagihanRowsForKartuSiswa($api, $selectedCustIds);
         if ($rawRows === null) {
-            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Coba lagi.');
+            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload, lalu coba lagi.');
         }
 
-        $selectedMap = array_fill_keys($selectedCustIds, true);
-        $cards = [];
-        foreach ($rawRows as $r) {
-            if (!is_array($r)) {
-                continue;
-            }
-            $custid = (int) ($r['custid'] ?? 0);
-            if ($custid <= 0 || !isset($selectedMap[$custid])) {
-                continue;
-            }
-            $paidRaw = $r['paidst'] ?? '0';
-            $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
-            if (!isset($cards[$custid])) {
-                $kelompok = trim((string) ($r['kelompok'] ?? ''));
-                if ($kelompok === '') {
-                    $kelompok = trim((string) ($r['DESC03'] ?? $r['desc03'] ?? ''));
-                }
-                $cards[$custid] = [
-                    'custid' => $custid,
-                    'nis' => trim((string) ($r['nis'] ?? '')),
-                    'nama' => trim((string) ($r['nama'] ?? '')),
-                    'unit' => trim((string) ($r['unit'] ?? '')),
-                    'kelas' => trim((string) ($r['kelas'] ?? '')),
-                    'kelompok' => $kelompok,
-                    'items' => [],
-                ];
-            }
-            $cards[$custid]['items'][] = [
-                'nama_tagihan' => trim((string) ($r['nama_tagihan'] ?? '')),
-                'tahun_aka' => trim((string) ($r['tahun_aka'] ?? '')),
-                'tagihan' => (int) ($r['tagihan'] ?? 0),
-                'status' => $isLunas ? 'Lunas' : 'Belum lunas',
-            ];
-        }
+        $cards = $this->buildKartuSiswaCardsFromTagihanRows($rawRows, $selectedCustIds);
         if ($cards === []) {
-            return redirect()->back()->with('export_error', 'Siswa terpilih tidak memiliki tagihan pada filter saat ini. Centang siswa yang tampil di tabel lalu coba lagi.');
+            Log::warning('[Cetak Kartu Siswa] kosong', ['custids' => $selectedCustIds, 'row_count' => count($rawRows)]);
+
+            return redirect()->back()->with(
+                'export_error',
+                'Tagihan siswa terpilih tidak ditemukan. Centang baris di tabel Rekap Tagihan (setelah klik Cari), lalu cetak lagi.'
+            );
         }
 
         $pdf = Pdf::loadView('keuangan.tagihan-siswa.data-tagihan-kartu-siswa-pdf', [
@@ -962,20 +928,22 @@ XML);
 
         $filters = $this->validatedDataTagihanFiltersFromRequest($request);
 
-        $rawRows = $this->fetchAllDataTagihanRowsForExport($api, $filters);
+        $rawRows = $this->fetchTagihanRowsForRekapCetak($api, $filters);
         if ($rawRows === null) {
-            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Coba lagi.');
+            return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
         }
         if ($rawRows === []) {
             return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk cetak rekap.');
         }
 
         $rows = [];
+        $no = 1;
         foreach ($rawRows as $r) {
             if (!is_array($r)) {
                 continue;
             }
             $rows[] = [
+                'no' => $no++,
                 'nis' => trim((string) ($r['nis'] ?? '')),
                 'nama' => trim((string) ($r['nama'] ?? '')),
                 'nama_tagihan' => trim((string) ($r['nama_tagihan'] ?? '')),
@@ -1054,6 +1022,103 @@ XML);
     }
 
     /**
+     * Ambil data cetak rekap: satu panggilan WS + fallback loop export.
+     *
+     * @param array<string, string> $filters
+     * @return list<array<string, mixed>>|null
+     */
+    private function fetchTagihanRowsForRekapCetak(AmalFatimahApiService $api, array $filters): ?array
+    {
+        $res = $api->getTagihanRekapCetak($filters, 5000);
+        if ($res['ok']) {
+            $rows = $res['data']['rows'] ?? [];
+            if (is_array($rows) && $rows !== []) {
+                return $rows;
+            }
+        }
+
+        return $this->fetchAllDataTagihanRowsForExport($api, $filters, 5000);
+    }
+
+    /**
+     * Ambil tagihan untuk kartu siswa: API khusus (cepat) + fallback getDataTagihan + custids.
+     *
+     * @param list<int> $custids
+     * @return list<array<string, mixed>>|null
+     */
+    private function fetchTagihanRowsForKartuSiswa(AmalFatimahApiService $api, array $custids): ?array
+    {
+        $kartuRes = $api->getTagihanKartuSiswa($custids, '');
+        if ($kartuRes['ok']) {
+            $rows = $kartuRes['data']['rows'] ?? [];
+            if (is_array($rows) && $rows !== []) {
+                return $rows;
+            }
+        }
+
+        $filters = [
+            'tgl_dari' => '',
+            'tgl_sampai' => '',
+            'thn_angkatan' => '',
+            'thn_akademik' => '',
+            'kelas_id' => '',
+            'nama_tagihan' => '',
+            'siswa' => '',
+            'sort_urutan' => 'asc',
+        ];
+
+        return $this->fetchAllDataTagihanRowsForExport($api, $filters, 3000, $custids);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rawRows
+     * @param list<int> $selectedCustIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildKartuSiswaCardsFromTagihanRows(array $rawRows, array $selectedCustIds): array
+    {
+        $selectedMap = array_fill_keys($selectedCustIds, true);
+        $cards = [];
+
+        foreach ($rawRows as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $custid = (int) ($r['custid'] ?? 0);
+            if ($custid <= 0 || !isset($selectedMap[$custid])) {
+                continue;
+            }
+            $paidRaw = $r['paidst'] ?? '0';
+            $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
+            if (!isset($cards[$custid])) {
+                $kelompok = trim((string) ($r['kelompok'] ?? ''));
+                if ($kelompok === '') {
+                    $kelompok = trim((string) ($r['DESC03'] ?? $r['desc03'] ?? ''));
+                }
+                $cards[$custid] = [
+                    'custid' => $custid,
+                    'nis' => trim((string) ($r['nis'] ?? '')),
+                    'nama' => trim((string) ($r['nama'] ?? '')),
+                    'unit' => trim((string) ($r['unit'] ?? '')),
+                    'kelas' => trim((string) ($r['kelas'] ?? '')),
+                    'kelompok' => $kelompok,
+                    'items' => [],
+                ];
+            }
+            $cards[$custid]['items'][] = [
+                'nama_tagihan' => trim((string) ($r['nama_tagihan'] ?? '')) !== ''
+                    ? trim((string) $r['nama_tagihan'])
+                    : '-',
+                'tahun_aka' => trim((string) ($r['tahun_aka'] ?? '')),
+                'tagihan' => (int) ($r['tagihan'] ?? 0),
+                'status' => $isLunas ? 'Lunas' : 'Belum lunas',
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
      * Kolom tampilan Rekap Tagihan (rek, angkatan, kode, nama_post) dari baris getDataTagihan.
      *
      * @param list<mixed> $apiRows
@@ -1122,17 +1187,23 @@ XML);
     private function selectedCustIdsFromRequest(Request $request): array
     {
         $raw = $request->input('selected_rows');
-        if (!is_string($raw) || trim($raw) === '') {
-            return [];
+        $decoded = null;
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } elseif (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
         }
-        $decoded = json_decode($raw, true);
         if (!is_array($decoded)) {
             return [];
         }
 
         $bucket = [];
         foreach ($decoded as $v) {
-            $n = (int) $v;
+            if (is_array($v)) {
+                $n = (int) ($v['custid'] ?? 0);
+            } else {
+                $n = (int) $v;
+            }
             if ($n > 0) {
                 $bucket[$n] = true;
             }

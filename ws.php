@@ -3484,15 +3484,32 @@ function getDataTagihan(array $req): array
 
     $whereSql = implode(' AND ', $where);
 
-    $forExport = (int) ($req['for_export'] ?? 0) === 1;
-    $maxCap = $forExport ? 2000 : 200;
-    $limit = min(max((int) ($req['limit'] ?? 10), 1), $maxCap);
-    $offset = max((int) ($req['offset'] ?? 0), 0);
-    $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
-    $sqlLimit = $includeTotal ? $limit : min($maxCap, $limit + 1);
+    $rekapCetak = (int) ($req['rekap_cetak'] ?? 0) === 1;
+    $forExport = (int) ($req['for_export'] ?? 0) === 1 || $rekapCetak;
+    if ($rekapCetak) {
+        $maxCap = 5000;
+        $limit = min(max((int) ($req['limit'] ?? 5000), 1), $maxCap);
+        $offset = 0;
+        $includeTotal = false;
+        $sqlLimit = $limit;
+    } else {
+        $maxCap = $forExport ? 2000 : 200;
+        $limit = min(max((int) ($req['limit'] ?? 10), 1), $maxCap);
+        $offset = max((int) ($req['offset'] ?? 0), 0);
+        $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
+        $sqlLimit = $includeTotal ? $limit : min($maxCap, $limit + 1);
+    }
 
-    $sql = "
-        SELECT
+    if ($rekapCetak) {
+        $selectSql = "
+            TRIM(c.NOCUST) AS nis,
+            TRIM(c.NMCUST) AS nama,
+            TRIM(b.BILLNM) AS nama_tagihan,
+            COALESCE(b.BILLAM, 0) AS tagihan,
+            TRIM(b.BTA) AS tahun_aka
+        ";
+    } else {
+        $selectSql = "
             b.CUSTID AS custid,
             TRIM(b.BILLCD) AS billcd,
             TRIM(c.NOCUST) AS nis,
@@ -3512,6 +3529,11 @@ function getDataTagihan(array $req): array
             TRIM(c.DESC04) AS angkatan,
             TRIM(b.BILLCD) AS kode,
             TRIM(b.BILLNM) AS nama_post
+        ";
+    }
+
+    $sql = "
+        SELECT {$selectSql}
         FROM scctbill b
         INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
         LEFT JOIN mst_kelas mk ON mk.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
@@ -3534,7 +3556,9 @@ function getDataTagihan(array $req): array
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $hasMore = false;
-    if (!$includeTotal && count($rows) > $limit) {
+    if ($rekapCetak) {
+        $hasMore = false;
+    } elseif (!$includeTotal && count($rows) > $limit) {
         array_pop($rows);
         $hasMore = true;
     }
@@ -3579,6 +3603,105 @@ function getDataTagihan(array $req): array
         'total' => $total,
         'has_more' => $hasMore,
     ];
+}
+
+/**
+ * Tagihan untuk cetak kartu siswa: satu query per daftar CUSTID (tanpa pagination berulang).
+ *
+ * @return array{rows: array<int, array<string, mixed>>}
+ */
+function getTagihanKartuSiswa(array $req): array
+{
+    $pdo = dbConnectPdo();
+
+    $custids = $req['custids'] ?? [];
+    if (!is_array($custids)) {
+        $custids = [];
+    }
+    $custidNums = [];
+    foreach ($custids as $v) {
+        $n = (int) $v;
+        if ($n > 0) {
+            $custidNums[] = $n;
+        }
+    }
+    $custidNums = array_values(array_unique($custidNums));
+    if ($custidNums === []) {
+        return ['rows' => []];
+    }
+
+    $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
+    $where = ['b.FSTSBolehBayar = 1'];
+    $params = [];
+
+    $inParams = [];
+    foreach ($custidNums as $i => $custid) {
+        $ph = ':custid_' . $i;
+        $inParams[] = $ph;
+        $params[$ph] = $custid;
+    }
+    $where[] = 'b.CUSTID IN (' . implode(', ', $inParams) . ')';
+
+    if ($thnAkademik !== '') {
+        $where[] = '(
+            UPPER(TRIM(b.BTA)) = UPPER(TRIM(:bta))
+            OR UPPER(TRIM(b.BTA)) LIKE CONCAT(UPPER(TRIM(:bta_like)), "%")
+            OR LEFT(TRIM(b.BTA), 4) = LEFT(TRIM(:bta_yr), 4)
+        )';
+        $params[':bta'] = $thnAkademik;
+        $params[':bta_like'] = $thnAkademik;
+        $params[':bta_yr'] = $thnAkademik;
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $maxRows = min(max(count($custidNums) * 80, 100), 3000);
+
+    $sql = "
+        SELECT
+            b.CUSTID AS custid,
+            TRIM(b.BILLCD) AS billcd,
+            TRIM(c.NOCUST) AS nis,
+            TRIM(c.NMCUST) AS nama,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
+            TRIM(b.BILLNM) AS nama_tagihan,
+            COALESCE(b.BILLAM, 0) AS tagihan,
+            TRIM(b.BTA) AS tahun_aka,
+            TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
+        FROM scctbill b
+        INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
+        LEFT JOIN mst_kelas mk ON mk.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
+        WHERE {$whereSql}
+        ORDER BY b.CUSTID ASC, COALESCE(b.FUrutan, b.furutan, 0) ASC, b.BILLCD ASC
+        LIMIT :lim
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $k => $v) {
+        if (strpos($k, ':custid_') === 0) {
+            $stmt->bindValue($k, (int) $v, PDO::PARAM_INT);
+        } else {
+            $stmt->bindValue($k, $v, PDO::PARAM_STR);
+        }
+    }
+    $stmt->bindValue(':lim', $maxRows, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return ['rows' => $stmt->fetchAll(PDO::FETCH_ASSOC)];
+}
+
+/**
+ * Cetak rekap tagihan: satu query sesuai filter (maks 5000 baris).
+ *
+ * @return array{rows: array<int, array<string, mixed>>}
+ */
+function getTagihanRekapCetak(array $req): array
+{
+    $req['rekap_cetak'] = 1;
+    $data = getDataTagihan($req);
+
+    return ['rows' => $data['rows']];
 }
 
 /**
@@ -6624,6 +6747,28 @@ try {
         echo json_encode([
             'status' => 200,
             'method' => 'getDataTagihan',
+            'data'   => $data,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === 'getTagihanKartuSiswa') {
+        $data = getTagihanKartuSiswa($req);
+        http_response_code(200);
+        echo json_encode([
+            'status' => 200,
+            'method' => 'getTagihanKartuSiswa',
+            'data'   => $data,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    if ($method === 'getTagihanRekapCetak') {
+        $data = getTagihanRekapCetak($req);
+        http_response_code(200);
+        echo json_encode([
+            'status' => 200,
+            'method' => 'getTagihanRekapCetak',
             'data'   => $data,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;

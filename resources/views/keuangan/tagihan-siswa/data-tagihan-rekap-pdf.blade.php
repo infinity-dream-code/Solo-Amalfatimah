@@ -86,7 +86,7 @@
         <tbody>
             @forelse (($rows ?? []) as $i => $r)
                 <tr>
-                    <td class="ctr">{{ $i }}</td>
+                    <td class="ctr">{{ (int) ($r['no'] ?? ($i + 1)) }}</td>
                     <td class="ctr">{{ $r['nis'] !== '' ? $r['nis'] : '-' }}</td>
                     <td>{{ $r['nama'] !== '' ? $r['nama'] : '-' }}</td>
                     <td>{{ $r['nama_tagihan'] !== '' ? $r['nama_tagihan'] : '-' }}</td>
