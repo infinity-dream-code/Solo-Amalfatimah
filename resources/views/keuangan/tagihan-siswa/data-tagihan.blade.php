@@ -290,6 +290,10 @@
                                 $custid = (int) ($r['custid'] ?? 0);
                                 $billcd = (string) ($r['billcd'] ?? '');
                                 $furutan = (int) ($r['furutan'] ?? 0);
+                                $maxFurutan = (int) ($r['max_furutan_cust'] ?? $furutan);
+                                if ($maxFurutan < $furutan) {
+                                    $maxFurutan = $furutan;
+                                }
                                 $aa = trim((string) ($r['aa'] ?? ''));
                                 $paidRaw = $r['paidst'] ?? '0';
                                 $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
@@ -313,14 +317,14 @@
                                 <td class="dt-num"><strong>{{ $furutan }}</strong></td>
                                 <td>
                                     @if ($custid > 0 && $aa !== '')
-                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}">↑ Naikkan</button>
+                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan >= $maxFurutan) disabled title="Sudah urutan terbesar" @endif>↑ Naikkan</button>
                                     @else
                                         —
                                     @endif
                                 </td>
                                 <td>
                                     @if ($custid > 0 && $aa !== '')
-                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}">↓ Turunkan</button>
+                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan <= 1) disabled title="Sudah urutan 1" @endif>↓ Turunkan</button>
                                     @else
                                         —
                                     @endif
