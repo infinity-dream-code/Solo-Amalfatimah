@@ -52,6 +52,16 @@ function penerimaanPerfLog(array $entry): void
     @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
 }
 
+/** Log naik/turun urutan tagihan (satu baris JSON per aksi). */
+function tagihanUrutanLog(array $entry): void
+{
+    $entry['at'] = date('Y-m-d H:i:s');
+    $path = __DIR__ . '/tagihan_urutan.log';
+    $line = json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . PHP_EOL;
+    @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+    writeLog(['scope' => 'tagihan_urutan', 'entry' => $entry]);
+}
+
 function loadEnv(string $path): void
 {
     if (!file_exists($path)) {
@@ -5574,6 +5584,152 @@ function createManualPembayaran(array $req): array
     ];
 }
 
+/**
+ * Snapshot kolom urutan satu baris scctbill (untuk debug naik/turun).
+ *
+ * @return array<string, mixed>|null
+ */
+function tagihanUrutanRowSnapshot(PDO $pdo, string $custid, string $aa): ?array
+{
+    $st = $pdo->prepare("
+        SELECT TRIM(CAST(AA AS CHAR)) AS aa,
+               TRIM(BILLCD) AS billcd,
+               COALESCE(FUrutan, 0) AS f_urutan,
+               COALESCE(furutan, 0) AS furutan_lower,
+               COALESCE(FUrutan, furutan, 0) AS urutan_display
+        FROM scctbill
+        WHERE CUSTID = :c AND TRIM(CAST(AA AS CHAR)) = :aa
+        LIMIT 1
+    ");
+    $st->execute([':c' => $custid, ':aa' => $aa]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+
+    return $row ?: null;
+}
+
+function tagihanUrutanMaxForCust(PDO $pdo, string $custid): int
+{
+    $st = $pdo->prepare('
+        SELECT MAX(COALESCE(FUrutan, furutan, 0)) FROM scctbill WHERE CUSTID = :c
+    ');
+    $st->execute([':c' => $custid]);
+
+    return (int) ($st->fetchColumn() ?: 0);
+}
+
+function tagihanUrutanExpectedNoop(string $direction, int $urutan, int $maxUrut): bool
+{
+    if ($direction === 'up') {
+        return $urutan <= 1;
+    }
+
+    return $maxUrut > 0 && $urutan >= $maxUrut;
+}
+
+/**
+ * Panggil stored procedure MySQL (UpdateUrutUP / UpdateUrutDOWN).
+ */
+function pdoCallStoredProcedure(PDO $pdo, string $procedureName, array $params): void
+{
+    $allowed = ['UpdateUrutUP', 'UpdateUrutDOWN'];
+    if (!in_array($procedureName, $allowed, true)) {
+        throw new InvalidArgumentException('Prosedur tidak diizinkan');
+    }
+
+    $call = $pdo->prepare("CALL {$procedureName}(:v_CUSTID, :p_AA)");
+    $call->execute($params);
+    do {
+        $call->closeCursor();
+    } while ($call->nextRowset());
+}
+
+function isMysqlDefinerMissingError(Throwable $e): bool
+{
+    $msg = $e->getMessage();
+
+    return str_contains($msg, '1449') || stripos($msg, 'definer') !== false;
+}
+
+/**
+ * Fallback bila CALL gagal (DEFINER tidak ada): logika sama UpdateUrutUP / UpdateUrutDOWN.
+ */
+function updateDataTagihanUrutanSwap(PDO $pdo, string $custid, string $aa, string $direction): void
+{
+    $urutCol = 'COALESCE(FUrutan, furutan)';
+
+    $stMax = $pdo->prepare("SELECT MAX({$urutCol}) FROM scctbill WHERE CUSTID = :c");
+    $stMax->execute([':c' => $custid]);
+    $max = (int) ($stMax->fetchColumn() ?: 0);
+
+    $stCur = $pdo->prepare("
+        SELECT {$urutCol} AS u FROM scctbill
+        WHERE CUSTID = :c AND TRIM(CAST(AA AS CHAR)) = :aa LIMIT 1
+    ");
+    $stCur->execute([':c' => $custid, ':aa' => $aa]);
+    $tempUrutan = (int) ($stCur->fetchColumn() ?: 0);
+    if ($tempUrutan <= 0) {
+        throw new RuntimeException('Urutan tagihan tidak valid');
+    }
+
+    if ($direction === 'up') {
+        if ($tempUrutan <= 1) {
+            return;
+        }
+        $neighborUrut = $tempUrutan - 1;
+        $newTargetUrut = $tempUrutan - 1;
+    } else {
+        if ($tempUrutan >= $max) {
+            return;
+        }
+        $neighborUrut = $tempUrutan + 1;
+        $newTargetUrut = $tempUrutan + 1;
+    }
+
+    $stNeigh = $pdo->prepare("
+        SELECT TRIM(CAST(AA AS CHAR)) AS aa FROM scctbill
+        WHERE CUSTID = :c AND {$urutCol} = :u LIMIT 1
+    ");
+    $stNeigh->execute([':c' => $custid, ':u' => $neighborUrut]);
+    $tempAa = trim((string) ($stNeigh->fetchColumn() ?: ''));
+    if ($tempAa === '') {
+        throw new RuntimeException('Tagihan tetangga urutan tidak ditemukan');
+    }
+
+    static $urutColName = null;
+    if ($urutColName === null) {
+        $hasF = false;
+        $hasL = false;
+        $stCol = $pdo->query('SHOW COLUMNS FROM scctbill');
+        if ($stCol) {
+            while ($cr = $stCol->fetch(PDO::FETCH_ASSOC)) {
+                $n = (string) ($cr['Field'] ?? '');
+                if (strcasecmp($n, 'FUrutan') === 0) {
+                    $hasF = true;
+                }
+                if (strcasecmp($n, 'furutan') === 0) {
+                    $hasL = true;
+                }
+            }
+        }
+        $urutColName = $hasF ? 'FUrutan' : ($hasL ? 'furutan' : 'FUrutan');
+    }
+
+    $stSet = $pdo->prepare("
+        UPDATE scctbill SET {$urutColName} = :u
+        WHERE CUSTID = :c AND TRIM(CAST(AA AS CHAR)) = :aa
+    ");
+
+    $pdo->beginTransaction();
+    try {
+        $stSet->execute([':u' => $tempUrutan, ':c' => $custid, ':aa' => $tempAa]);
+        $stSet->execute([':u' => $newTargetUrut, ':c' => $custid, ':aa' => $aa]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
 function updateDataTagihanUrutan(array $req): array
 {
     $custid    = trim((string) ($req['custid'] ?? ''));
@@ -5582,6 +5738,14 @@ function updateDataTagihanUrutan(array $req): array
     $direction = strtolower(trim((string) ($req['direction'] ?? '')));
 
     if ($custid === '' || !in_array($direction, ['up', 'down'], true)) {
+        tagihanUrutanLog([
+            'event' => 'reject',
+            'reason' => 'invalid_params',
+            'custid' => $custid,
+            'aa' => $aa,
+            'billcd' => $billcd,
+            'direction' => $direction,
+        ]);
         http_response_code(422);
         echo json_encode(['status' => 422, 'message' => 'custid dan direction (up|down) wajib valid'], JSON_UNESCAPED_UNICODE);
         exit;
@@ -5601,30 +5765,136 @@ function updateDataTagihanUrutan(array $req): array
     }
 
     if ($aa === '') {
+        tagihanUrutanLog([
+            'event' => 'reject',
+            'reason' => 'aa_not_found',
+            'custid' => $custid,
+            'billcd' => $billcd,
+            'direction' => $direction,
+        ]);
         http_response_code(404);
         echo json_encode(['status' => 404, 'message' => 'Kolom AA tagihan tidak ditemukan'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     $proc = $direction === 'up' ? 'UpdateUrutUP' : 'UpdateUrutDOWN';
+    $before = tagihanUrutanRowSnapshot($pdo, $custid, $aa);
+    $maxUrut = tagihanUrutanMaxForCust($pdo, $custid);
+    $beforeUrut = (int) ($before['urutan_display'] ?? 0);
+
+    tagihanUrutanLog([
+        'event' => 'start',
+        'custid' => $custid,
+        'aa' => $aa,
+        'billcd' => $billcd,
+        'direction' => $direction,
+        'proc' => $proc,
+        'before' => $before,
+        'max_urutan_cust' => $maxUrut,
+        'expected_noop' => tagihanUrutanExpectedNoop($direction, $beforeUrut, $maxUrut),
+    ]);
+
+    $usedFallback = false;
+    $callPath = 'none';
+    $lastError = '';
 
     try {
-        $call = $pdo->prepare("CALL {$proc}(:v_CUSTID, :p_AA)");
-        $call->execute([
+        pdoCallStoredProcedure($pdo, $proc, [
             ':v_CUSTID' => $custid,
             ':p_AA'      => $aa,
         ]);
-        do {
-            $call->closeCursor();
-        } while ($call->nextRowset());
+        $callPath = 'call_ok';
     } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode([
-            'status'  => 500,
-            'message' => 'Gagal memanggil prosedur urutan: ' . $e->getMessage(),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        $lastError = $e->getMessage();
+        if (isMysqlDefinerMissingError($e)) {
+            $callPath = 'call_definer_error';
+            try {
+                updateDataTagihanUrutanSwap($pdo, $custid, $aa, $direction);
+                $usedFallback = true;
+                $callPath = 'fallback_definer';
+            } catch (Throwable $e2) {
+                tagihanUrutanLog([
+                    'event' => 'error',
+                    'custid' => $custid,
+                    'aa' => $aa,
+                    'direction' => $direction,
+                    'call_path' => $callPath,
+                    'call_error' => $lastError,
+                    'fallback_error' => $e2->getMessage(),
+                ]);
+                http_response_code(500);
+                echo json_encode([
+                    'status'  => 500,
+                    'message' => 'Gagal mengubah urutan: ' . $e2->getMessage(),
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        } else {
+            tagihanUrutanLog([
+                'event' => 'error',
+                'custid' => $custid,
+                'aa' => $aa,
+                'direction' => $direction,
+                'call_path' => 'call_failed',
+                'call_error' => $lastError,
+            ]);
+            http_response_code(500);
+            echo json_encode([
+                'status'  => 500,
+                'message' => 'Gagal memanggil prosedur urutan: ' . $lastError,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
     }
+
+    $after = tagihanUrutanRowSnapshot($pdo, $custid, $aa);
+    $afterUrut = (int) ($after['urutan_display'] ?? 0);
+    $expectedNoop = tagihanUrutanExpectedNoop($direction, $beforeUrut, $maxUrut);
+    $unchanged = $afterUrut === $beforeUrut;
+
+    if (!$usedFallback && $unchanged && !$expectedNoop) {
+        tagihanUrutanLog([
+            'event' => 'call_noop_retry_fallback',
+            'custid' => $custid,
+            'aa' => $aa,
+            'direction' => $direction,
+            'before' => $before,
+            'after' => $after,
+        ]);
+        try {
+            updateDataTagihanUrutanSwap($pdo, $custid, $aa, $direction);
+            $usedFallback = true;
+            $callPath = 'fallback_call_noop';
+            $after = tagihanUrutanRowSnapshot($pdo, $custid, $aa);
+            $afterUrut = (int) ($after['urutan_display'] ?? 0);
+            $unchanged = $afterUrut === $beforeUrut;
+        } catch (Throwable $e2) {
+            tagihanUrutanLog([
+                'event' => 'fallback_after_noop_failed',
+                'custid' => $custid,
+                'aa' => $aa,
+                'error' => $e2->getMessage(),
+            ]);
+        }
+    }
+
+    tagihanUrutanLog([
+        'event' => 'done',
+        'custid' => $custid,
+        'aa' => $aa,
+        'billcd' => $billcd,
+        'direction' => $direction,
+        'proc' => $proc,
+        'call_path' => $callPath,
+        'used_fallback' => $usedFallback,
+        'before_urutan' => $beforeUrut,
+        'after_urutan' => $afterUrut,
+        'unchanged' => $unchanged,
+        'expected_noop' => $expectedNoop,
+        'before' => $before,
+        'after' => $after,
+        'call_error' => $lastError !== '' ? $lastError : null,
+    ]);
 
     $st = $pdo->prepare('
         SELECT COALESCE(FUrutan, furutan, 0) AS f, TRIM(BILLCD) AS billcd
@@ -5640,6 +5910,7 @@ function updateDataTagihanUrutan(array $req): array
         'aa'      => $aa,
         'billcd'  => trim((string) ($row['billcd'] ?? $billcd)),
         'furutan' => (int) ($row['f'] ?? 0),
+        'changed' => !$unchanged,
     ];
 }
 

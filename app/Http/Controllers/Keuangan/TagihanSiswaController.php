@@ -758,17 +758,38 @@ XML);
             'direction' => ['required', 'in:up,down'],
         ]);
 
+        $direction = (string) $validated['direction'];
+        $aa = trim((string) ($validated['aa'] ?? '')) !== '' ? trim((string) $validated['aa']) : null;
+
         $res = $api->updateDataTagihanUrutan(
             (int) $validated['custid'],
             trim((string) $validated['billcd']),
-            (string) $validated['direction'],
-            trim((string) ($validated['aa'] ?? '')) !== '' ? trim((string) $validated['aa']) : null
+            $direction,
+            $aa
         );
+
+        Log::info('[Data Tagihan] urutan', [
+            'custid' => (int) $validated['custid'],
+            'billcd' => trim((string) $validated['billcd']),
+            'aa' => $aa,
+            'direction' => $direction,
+            'ok' => $res['ok'],
+            'message' => $res['message'] ?? '',
+            'data' => $res['data'] ?? [],
+        ]);
+
+        $data = $res['data'] ?? [];
+        $message = (string) ($res['message'] ?? '');
+        if ($res['ok'] && array_key_exists('changed', $data) && $data['changed'] === false) {
+            $message = $direction === 'up'
+                ? 'Urutan tidak berubah (sudah paling atas atau tidak ada baris di atasnya).'
+                : 'Urutan tidak berubah (sudah paling bawah).';
+        }
 
         return response()->json([
             'ok' => $res['ok'],
-            'message' => $res['message'],
-            'data' => $res['data'] ?? [],
+            'message' => $message,
+            'data' => $data,
         ], $res['ok'] ? 200 : 422);
     }
 

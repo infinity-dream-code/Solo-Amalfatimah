@@ -505,6 +505,11 @@
                     postJson(urlUrutan, { custid: custid, billcd: billcd, aa: aa, direction: direction })
                         .then(function (res) {
                             if (res && res.ok) {
+                                if (res.data && res.data.changed === false) {
+                                    alert(res.message || 'Urutan tidak berubah.');
+                                    btn.disabled = false;
+                                    return;
+                                }
                                 window.location.reload();
                                 return;
                             }
