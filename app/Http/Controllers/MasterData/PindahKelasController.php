@@ -82,7 +82,7 @@ class PindahKelasController extends Controller
                 continue;
             }
             $seen[$value] = true;
-            $text = $nis !== '' && $nama !== '' ? ($nis . ' — ' . $nama) : ($nama !== '' ? $nama : $nis);
+            $text = $nis !== '' && $nama !== '' ? ($nis . ' - ' . $nama) : ($nama !== '' ? $nama : $nis);
             $out[] = ['value' => $value, 'text' => $text];
         }
 
