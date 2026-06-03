@@ -4238,8 +4238,8 @@ function getKartuSiswaPenerimaan(array $req): array
             'kelas'    => trim((string) ($s['DESC02'] ?? '')),
             'angkatan' => trim((string) ($s['DESC04'] ?? '')),
             'kelompok' => trim((string) ($s['DESC03'] ?? '')),
-            'ayah'     => trim((string) ($s['GENUS'] ?? '')),
-            'ibu'      => trim((string) ($s['GENUS'] ?? '')),
+            'wali'     => trim((string) ($s['GENUS'] ?? '')),
+            'genus'    => trim((string) ($s['GENUS'] ?? '')),
             'items'    => [],
             'total'    => 0,
         ];

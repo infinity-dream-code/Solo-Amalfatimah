@@ -139,7 +139,7 @@ class PenerimaanSiswaController extends Controller
     }
 
     /**
-     * Cetak kartu siswa (PDF) — siswa dipilih di grid; Ayah/Ibu dari scctcust (GENUS) via WS.
+     * Cetak kartu siswa (PDF) — siswa dipilih di grid; Wali dari scctcust.GENUS via WS.
      */
     public function printKartuSiswa(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {

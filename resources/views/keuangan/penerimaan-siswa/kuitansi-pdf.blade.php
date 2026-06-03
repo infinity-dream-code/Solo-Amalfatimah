@@ -103,8 +103,7 @@
             if ($kelasTampil === '') {
                 $kelasTampil = '-';
             }
-            $ayahT = trim((string) ($c['ayah'] ?? ''));
-            $ibuT = trim((string) ($c['ibu'] ?? ''));
+            $waliT = trim((string) ($c['wali'] ?? $c['genus'] ?? $c['ayah'] ?? ''));
             $baseTotal = (int) ($c['total'] ?? 0);
             $grandTotal = $baseTotal + ($dengan2000 ? 2000 : 0);
         @endphp
@@ -151,10 +150,8 @@
                     <td class="meta-val-r">: {{ $kelasTampil }}</td>
                 </tr>
                 <tr>
-                    <td class="meta-lbl">Ayah</td>
-                    <td class="meta-val">: {{ $ayahT !== '' ? $ayahT : '-' }}</td>
-                    <td class="meta-lbl-r">Ibu</td>
-                    <td class="meta-val-r">: {{ $ibuT !== '' ? $ibuT : '-' }}</td>
+                    <td class="meta-lbl">Wali</td>
+                    <td class="meta-val" colspan="3">: {{ $waliT !== '' ? $waliT : '-' }}</td>
                 </tr>
             </table>
 
