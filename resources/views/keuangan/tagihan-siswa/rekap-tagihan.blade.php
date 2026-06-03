@@ -237,15 +237,21 @@
                 return Object.keys(bucket).map(function (k) { return parseInt(k, 10); });
             }
 
-            function collectTagihanRows() {
-                const out = [];
-                rowChecks.forEach(function (cb) {
-                    if (!cb.checked) return;
-                    const n = parseInt(cb.getAttribute('data-custid') || '0', 10);
-                    const b = (cb.getAttribute('data-billcd') || '').trim();
-                    if (n > 0 && b !== '') out.push({ custid: n, billcd: b });
-                });
-                return out;
+            function submitPrintForm(form, btn, label) {
+                if (!form) return;
+                const buttons = [btnRekap, btnKartu, btnPerNis].filter(Boolean);
+                buttons.forEach(function (b) { b.disabled = true; });
+                if (btn) {
+                    btn.dataset.prevLabel = btn.textContent;
+                    btn.textContent = label || 'Memproses…';
+                }
+                form.submit();
+                window.setTimeout(function () {
+                    buttons.forEach(function (b) { b.disabled = false; });
+                    if (btn && btn.dataset.prevLabel) {
+                        btn.textContent = btn.dataset.prevLabel;
+                    }
+                }, 12000);
             }
 
             if (btnRekap && formRekap) {
@@ -254,7 +260,7 @@
                         alert('Data masih kosong. Klik Cari dulu sebelum cetak rekap.');
                         return;
                     }
-                    formRekap.submit();
+                    submitPrintForm(formRekap, btnRekap, 'Memproses rekap…');
                 });
             }
 
@@ -266,15 +272,19 @@
                         return;
                     }
                     inputKartu.value = JSON.stringify(picked);
-                    formKartu.submit();
+                    submitPrintForm(formKartu, btnKartu, 'Memproses kartu…');
                 });
             }
 
             if (btnPerNis && formPerNis && inputPerNis) {
                 btnPerNis.addEventListener('click', function () {
                     const picked = collectCustIds();
+                    if (picked.length === 0) {
+                        alert('Pilih minimal 1 siswa dari centang kiri tabel.');
+                        return;
+                    }
                     inputPerNis.value = JSON.stringify(picked);
-                    formPerNis.submit();
+                    submitPrintForm(formPerNis, btnPerNis, 'Memproses per NIS…');
                 });
             }
         })();

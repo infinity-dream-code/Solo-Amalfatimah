@@ -3372,12 +3372,25 @@ function penerimaanBuildPenerimaanFiltersFromReq(array $req): array
  * Data tagihan (belum & sudah lunas) untuk halaman Data Tagihan.
  * Pagination: LIMIT/OFFSET (+1 baris bila include_total=0, tanpa COUNT(*)).
  *
- * @return array{rows: array<int, array<string, mixed>>, total: int}
+ * @return array{rows: array<int, array<string, mixed>>, total: int, has_more: bool}
  */
 function getDataTagihan(array $req): array
 {
     $tWall0 = microtime(true);
     $pdo = dbConnectPdo();
+
+    $custids = $req['custids'] ?? [];
+    if (!is_array($custids)) {
+        $custids = [];
+    }
+    $custidNums = [];
+    foreach ($custids as $v) {
+        $n = (int) $v;
+        if ($n > 0) {
+            $custidNums[] = $n;
+        }
+    }
+    $custidNums = array_values(array_unique($custidNums));
 
     $tglDari = trim((string) ($req['tgl_dari'] ?? ''));
     $tglSampai = trim((string) ($req['tgl_sampai'] ?? ''));
@@ -3459,12 +3472,24 @@ function getDataTagihan(array $req): array
         $params[':siswa_nama'] = $sLike;
     }
 
+    if ($custidNums !== []) {
+        $inParams = [];
+        foreach ($custidNums as $i => $custid) {
+            $ph = ':custid_' . $i;
+            $inParams[] = $ph;
+            $params[$ph] = $custid;
+        }
+        $where[] = 'b.CUSTID IN (' . implode(', ', $inParams) . ')';
+    }
+
     $whereSql = implode(' AND ', $where);
 
-    $limit = min(max((int) ($req['limit'] ?? 10), 1), 200);
+    $forExport = (int) ($req['for_export'] ?? 0) === 1;
+    $maxCap = $forExport ? 2000 : 200;
+    $limit = min(max((int) ($req['limit'] ?? 10), 1), $maxCap);
     $offset = max((int) ($req['offset'] ?? 0), 0);
     $includeTotal = (int) ($req['include_total'] ?? 0) !== 0;
-    $sqlLimit = $includeTotal ? $limit : min(200, $limit + 1);
+    $sqlLimit = $includeTotal ? $limit : min($maxCap, $limit + 1);
 
     $sql = "
         SELECT
@@ -3497,7 +3522,11 @@ function getDataTagihan(array $req): array
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $k => $v) {
-        $stmt->bindValue($k, $v, PDO::PARAM_STR);
+        if (strpos($k, ':custid_') === 0) {
+            $stmt->bindValue($k, (int) $v, PDO::PARAM_INT);
+        } else {
+            $stmt->bindValue($k, $v, PDO::PARAM_STR);
+        }
     }
     $stmt->bindValue(':limit', $sqlLimit, PDO::PARAM_INT);
     $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
@@ -3519,7 +3548,11 @@ function getDataTagihan(array $req): array
             WHERE {$whereSql}
         ");
         foreach ($params as $k => $v) {
-            $stmtCount->bindValue($k, $v, PDO::PARAM_STR);
+            if (strpos($k, ':custid_') === 0) {
+                $stmtCount->bindValue($k, (int) $v, PDO::PARAM_INT);
+            } else {
+                $stmtCount->bindValue($k, $v, PDO::PARAM_STR);
+            }
         }
         $stmtCount->execute();
         $total = (int) ($stmtCount->fetchColumn() ?: 0);
@@ -3536,6 +3569,7 @@ function getDataTagihan(array $req): array
             'limit' => $limit,
             'offset' => $offset,
             'include_total' => $includeTotal ? 1 : 0,
+            'for_export' => $forExport ? 1 : 0,
             'row_count' => count($rows),
         ]);
     }
@@ -3543,6 +3577,7 @@ function getDataTagihan(array $req): array
     return [
         'rows' => $rows,
         'total' => $total,
+        'has_more' => $hasMore,
     ];
 }
 
@@ -4104,7 +4139,7 @@ function getDataPembayaranPerNis(array $req): array
             SELECT
                 b.CUSTID,
                 b.BILLCD,
-                TRIM(b.BILLAC) AS billac,
+                COALESCE(NULLIF(TRIM(b.BILLAC), ''), '-') AS billac,
                 CAST(COALESCE(b.BILLAM, 0) AS SIGNED) AS billam,
                 TRIM(c.DESC04) AS tahun_masuk,
                 COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,

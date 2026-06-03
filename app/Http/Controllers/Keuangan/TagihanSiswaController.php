@@ -903,7 +903,7 @@ XML);
         $filtersForKartu = $filters;
         $filtersForKartu['nama_tagihan'] = '';
 
-        $rawRows = $this->fetchAllDataTagihanRowsForExport($api, $filtersForKartu);
+        $rawRows = $this->fetchAllDataTagihanRowsForExport($api, $filtersForKartu, 5000, $selectedCustIds);
         if ($rawRows === null) {
             return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Coba lagi.');
         }
@@ -920,10 +920,6 @@ XML);
             }
             $paidRaw = $r['paidst'] ?? '0';
             $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
-            // Cetak kartu dari Rekap Tagihan: tampilkan hanya yang belum lunas.
-            if ($isLunas) {
-                continue;
-            }
             if (!isset($cards[$custid])) {
                 $kelompok = trim((string) ($r['kelompok'] ?? ''));
                 if ($kelompok === '') {
@@ -947,7 +943,7 @@ XML);
             ];
         }
         if ($cards === []) {
-            return redirect()->back()->with('export_error', 'Siswa terpilih tidak memiliki data tagihan pada filter saat ini.');
+            return redirect()->back()->with('export_error', 'Siswa terpilih tidak memiliki tagihan pada filter saat ini. Centang siswa yang tampil di tabel lalu coba lagi.');
         }
 
         $pdf = Pdf::loadView('keuangan.tagihan-siswa.data-tagihan-kartu-siswa-pdf', [
@@ -1009,22 +1005,31 @@ XML);
             'kelas_id' => trim((string) $request->input('kelas_id', '')),
             'nama_tagihan' => trim((string) $request->input('nama_tagihan', '')),
             'siswa' => trim((string) $request->input('siswa', '')),
+            'sort_urutan' => in_array(strtolower(trim((string) $request->input('sort_urutan', 'asc'))), ['asc', 'desc'], true)
+                ? strtolower(trim((string) $request->input('sort_urutan', 'asc')))
+                : 'asc',
         ];
     }
 
     /**
-     * Ambil semua baris yang cocok filter (API max 200 per panggilan).
+     * Ambil semua baris untuk cetak/export (chunk besar + filter custid opsional).
      *
+     * @param list<int> $custids
      * @return list<array<string, mixed>>|null null jika error WS
      */
-    private function fetchAllDataTagihanRowsForExport(AmalFatimahApiService $api, array $filters, int $maxRows = 10000): ?array
-    {
-        $chunk = 200;
+    private function fetchAllDataTagihanRowsForExport(
+        AmalFatimahApiService $api,
+        array $filters,
+        int $maxRows = 10000,
+        array $custids = []
+    ): ?array {
+        $chunk = 1000;
         $all = [];
         $offset = 0;
+        $maxLoops = (int) ceil($maxRows / $chunk) + 2;
 
-        while (count($all) < $maxRows) {
-            $res = $api->getDataTagihan($filters, $chunk, $offset);
+        for ($loop = 0; $loop < $maxLoops && count($all) < $maxRows; $loop++) {
+            $res = $api->getDataTagihan($filters, $chunk, $offset, true, $custids);
             if (!$res['ok']) {
                 return null;
             }
@@ -1034,11 +1039,15 @@ XML);
             }
             foreach ($rows as $r) {
                 $all[] = $r;
+                if (count($all) >= $maxRows) {
+                    break 2;
+                }
             }
-            if (count($rows) < $chunk) {
+            $hasMore = (bool) ($res['data']['has_more'] ?? false);
+            if (!$hasMore) {
                 break;
             }
-            $offset += $chunk;
+            $offset += count($rows);
         }
 
         return $all;
@@ -1266,6 +1275,17 @@ XML);
             return $pdf->stream('export-tagihan-' . date('Ymd-His') . '.pdf');
         }
         if ($useCustOnly) {
+            if ($selectedCustIds === []) {
+                $pdf = Pdf::loadView('keuangan.tagihan-siswa.data-pembayaran-per-nis-pdf', [
+                    'rows' => [],
+                    'billacGroups' => [],
+                    'dateRange' => now('Asia/Jakarta')->format('Y-m-d'),
+                    'errorMessage' => 'Pilih minimal 1 siswa dari centang kiri tabel.',
+                ])->setPaper('a4', 'landscape');
+
+                return $pdf->stream('data-pembayaran-per-nis-' . date('Ymd-His') . '.pdf');
+            }
+
             $res = $api->getDataPembayaranPerNis($filters, $selectedCustIds);
             $raw = $res['ok'] ? ($res['data']['rows'] ?? []) : [];
             $errorMessage = $res['ok'] ? '' : (string) ($res['message'] ?? 'Gagal mengambil data dari server.');
@@ -1282,8 +1302,11 @@ XML);
                 }
                 $billac = trim((string) ($r['billac'] ?? ''));
                 $akun = trim((string) ($r['akun'] ?? ''));
-                if ($billac === '' || $akun === '') {
-                    continue;
+                if ($billac === '') {
+                    $billac = '-';
+                }
+                if ($akun === '') {
+                    $akun = 'TAGIHAN';
                 }
 
                 if (!isset($billacAkunMap[$billac])) {
@@ -1306,6 +1329,46 @@ XML);
                     $pivot[$custid]['values'][$billac] = [];
                 }
                 $pivot[$custid]['values'][$billac][$akun] = (int) ($pivot[$custid]['values'][$billac][$akun] ?? 0) + (int) ($r['nominal'] ?? 0);
+            }
+
+            if ($pivot === [] && $res['ok']) {
+                $tagihanRows = $this->fetchAllDataTagihanRowsForExport($api, $filters, 5000, $selectedCustIds);
+                if (is_array($tagihanRows)) {
+                    foreach ($tagihanRows as $tr) {
+                        if (!is_array($tr)) {
+                            continue;
+                        }
+                        $custid = (int) ($tr['custid'] ?? 0);
+                        if ($custid <= 0) {
+                            continue;
+                        }
+                        $billac = trim((string) ($tr['nama_tagihan'] ?? ''));
+                        if ($billac === '') {
+                            $billac = '-';
+                        }
+                        $akun = 'TAGIHAN';
+                        $nominal = (int) ($tr['tagihan'] ?? 0);
+                        if (!isset($billacAkunMap[$billac])) {
+                            $billacAkunMap[$billac] = [];
+                        }
+                        $billacAkunMap[$billac][$akun] = true;
+                        if (!isset($pivot[$custid])) {
+                            $pivot[$custid] = [
+                                'tahun_masuk' => trim((string) ($tr['angkatan'] ?? '')),
+                                'unit' => trim((string) ($tr['unit'] ?? '')),
+                                'kelas' => trim((string) ($tr['kelas'] ?? '')),
+                                'kelompok' => trim((string) ($tr['kelompok'] ?? '')),
+                                'nis' => trim((string) ($tr['nis'] ?? '')),
+                                'nama' => trim((string) ($tr['nama'] ?? '')),
+                                'values' => [],
+                            ];
+                        }
+                        if (!isset($pivot[$custid]['values'][$billac])) {
+                            $pivot[$custid]['values'][$billac] = [];
+                        }
+                        $pivot[$custid]['values'][$billac][$akun] = (int) ($pivot[$custid]['values'][$billac][$akun] ?? 0) + $nominal;
+                    }
+                }
             }
 
             $billacGroups = [];
