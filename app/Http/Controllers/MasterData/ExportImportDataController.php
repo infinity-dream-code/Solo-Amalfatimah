@@ -204,6 +204,7 @@ class ExportImportDataController extends Controller
                 'angkatan' => trim((string) ($row['angkatan'] ?? '')),
                 'gender' => trim((string) ($row['gender'] ?? '')),
                 'alamat' => trim((string) ($row['alamat'] ?? '')),
+                'wali' => trim((string) ($row['wali'] ?? '')),
             ];
         }, $decoded), static fn ($row) => is_array($row) && (($row['nis'] ?? '') !== '' || ($row['nama'] ?? '') !== '')));
     }

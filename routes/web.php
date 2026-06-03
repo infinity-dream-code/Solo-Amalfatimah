@@ -54,13 +54,15 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::put('/kelas/{id}', [MasterKelasController::class, 'update'])->name('kelas.update');
         Route::delete('/kelas/{id}', [MasterKelasController::class, 'destroy'])->name('kelas.destroy');
 
-        // Master Sekolah
-        Route::get('/sekolah', [MasterSekolahController::class, 'index'])->name('sekolah');
-        Route::get('/sekolah/create', [MasterSekolahController::class, 'create'])->name('sekolah.create');
-        Route::post('/sekolah', [MasterSekolahController::class, 'store'])->name('sekolah.store');
-        Route::get('/sekolah/{id}/edit', [MasterSekolahController::class, 'edit'])->name('sekolah.edit');
-        Route::put('/sekolah/{id}', [MasterSekolahController::class, 'update'])->name('sekolah.update');
-        Route::delete('/sekolah/{id}', [MasterSekolahController::class, 'destroy'])->name('sekolah.destroy');
+        // Master Sekolah — hanya Super Admin (cyber_key.fid kosong)
+        Route::middleware('superadmin')->group(function () {
+            Route::get('/sekolah', [MasterSekolahController::class, 'index'])->name('sekolah');
+            Route::get('/sekolah/create', [MasterSekolahController::class, 'create'])->name('sekolah.create');
+            Route::post('/sekolah', [MasterSekolahController::class, 'store'])->name('sekolah.store');
+            Route::get('/sekolah/{id}/edit', [MasterSekolahController::class, 'edit'])->name('sekolah.edit');
+            Route::put('/sekolah/{id}', [MasterSekolahController::class, 'update'])->name('sekolah.update');
+            Route::delete('/sekolah/{id}', [MasterSekolahController::class, 'destroy'])->name('sekolah.destroy');
+        });
 
         // Tahun Pelajaran
         Route::get('/tahun-pelajaran', [TahunPelajaranController::class, 'index'])->name('tahun_pelajaran');
@@ -104,6 +106,7 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::post('/setting-atribut-siswa/clear', [SettingAtributSiswaController::class, 'clear'])->name('setting_atribut_siswa.clear');
 
         // Pindah Kelas
+        Route::get('/pindah-kelas/siswa-options', [PindahKelasController::class, 'siswaOptions'])->name('pindah_kelas.siswa_options');
         Route::get('/pindah-kelas', [PindahKelasController::class, 'index'])->name('pindah_kelas');
         Route::post('/pindah-kelas', [PindahKelasController::class, 'store'])->name('pindah_kelas.store');
     });

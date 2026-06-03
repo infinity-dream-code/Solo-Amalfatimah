@@ -243,6 +243,7 @@
                             <th>ANGKATAN</th>
                             <th>JENIS KELAMIN</th>
                             <th>ALAMAT</th>
+                            <th>WALI</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -258,10 +259,11 @@
                                 <td>{{ $row['angkatan'] ?? '-' }}</td>
                                 <td>{{ $row['gender'] ?? '-' }}</td>
                                 <td>{{ $row['alamat'] ?? '-' }}</td>
+                                <td>{{ $row['wali'] ?? '-' }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="eid-empty">Tidak ada data yang tersedia pada tabel ini</td>
+                                <td colspan="11" class="eid-empty">Tidak ada data yang tersedia pada tabel ini</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -319,7 +321,7 @@
                 <ul class="eid-rules">
                     <li>File harus berformat <b>XLSX</b>.</li>
                     <li>Ukuran file tidak boleh lebih dari <b>1024KB / 1MB</b>.</li>
-                    <li>Kolom yang harus terisi: <b>NIS</b>.</li>
+                    <li>Kolom yang harus terisi: <b>NIS</b>. Kolom opsional: NODAF, NAMA, UNIT, KELAS, KELOMPOK, ANGKATAN, GENDER, ALAMAT, <b>WALI</b>.</li>
                     <li>Contoh file import:
                         <a href="{{ asset('format.xlsx') }}" target="_blank" rel="noopener">format.xlsx</a>
                     </li>
@@ -391,7 +393,8 @@
                                 kelompok: String(r.KELOMPOK || '').trim(),
                                 angkatan: String(r.ANGKATAN || '').trim(),
                                 gender: String(r.GENDER || '').trim(),
-                                alamat: String(r.ALAMAT || '').trim()
+                                alamat: String(r.ALAMAT || '').trim(),
+                                wali: String(r.WALI || r.Wali || '').trim()
                             };
                         });
                         previewInput.value = JSON.stringify(normalized);

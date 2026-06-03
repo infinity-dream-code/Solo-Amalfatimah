@@ -38,8 +38,9 @@
                 <th>No Pendaftaran</th>
                 <th>Unit</th>
                 <th>Kelas</th>
-                <th>Jenjang</th>
+                <th>Kelompok</th>
                 <th>Angkatan</th>
+                <th>Wali</th>
             </tr>
         </thead>
         <tbody>
@@ -48,9 +49,13 @@
                     $r = array_change_key_case((array) $row, CASE_LOWER);
                     $nocust = trim((string) ($r['nocust'] ?? ''));
                     $vaDigits = preg_replace('/\D+/', '', $nocust);
-                    $c01 = trim((string) ($r['code01'] ?? ''));
-                    $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
-                    $unitLabel = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                    $unit = trim((string) ($r['code02'] ?? ''));
+                    if ($unit === '') {
+                        $c01 = trim((string) ($r['code01'] ?? ''));
+                        $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
+                        $unit = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                    }
+                    $wali = trim((string) ($r['wali'] ?? $r['genus'] ?? ''));
                 @endphp
                 <tr>
                     <td class="text-center">{{ $index + 1 }}</td>
@@ -58,14 +63,15 @@
                     <td>{{ $vaDigits !== '' ? ('7510050' . $vaDigits) : '-' }}</td>
                     <td>{{ trim((string) ($r['nmcust'] ?? '')) !== '' ? $r['nmcust'] : '-' }}</td>
                     <td>{{ trim((string) ($r['num2nd'] ?? '')) !== '' ? $r['num2nd'] : '-' }}</td>
-                    <td>{{ $unitLabel }}</td>
+                    <td>{{ $unit !== '' ? $unit : '-' }}</td>
                     <td>{{ trim((string) ($r['desc02'] ?? '')) !== '' ? $r['desc02'] : '-' }}</td>
                     <td>{{ trim((string) ($r['desc03'] ?? '')) !== '' ? $r['desc03'] : '-' }}</td>
                     <td>{{ trim((string) ($r['desc04'] ?? '')) !== '' ? $r['desc04'] : '-' }}</td>
+                    <td>{{ $wali !== '' ? $wali : '-' }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="text-center">Data tidak ditemukan.</td>
+                    <td colspan="10" class="text-center">Data tidak ditemukan.</td>
                 </tr>
             @endforelse
         </tbody>

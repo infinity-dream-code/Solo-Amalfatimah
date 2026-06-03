@@ -40,6 +40,11 @@ class AuthController extends Controller
             'auth_user_id' => (int) ($user['id'] ?? 0),
             'auth_username' => (string) ($user['username'] ?? ''),
             'auth_name' => (string) ($user['name'] ?? ''),
+            'auth_fid' => (string) ($user['fid'] ?? ''),
+            'auth_kel' => (string) ($user['kel'] ?? ''),
+            'auth_is_superadmin' => (bool) ($user['is_superadmin'] ?? false),
+            'auth_sekolah_code01' => (string) ($user['sekolah_code01'] ?? ''),
+            'auth_sekolah_nama' => (string) ($user['sekolah_nama'] ?? ($user['unit'] ?? '')),
         ]);
         $request->session()->regenerate();
 
@@ -48,11 +53,18 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        session()->forget('dummy_logged_in');
-        session()->forget('auth_user');
-        session()->forget('auth_user_id');
-        session()->forget('auth_username');
-        session()->forget('auth_name');
+        session()->forget([
+            'dummy_logged_in',
+            'auth_user',
+            'auth_user_id',
+            'auth_username',
+            'auth_name',
+            'auth_fid',
+            'auth_kel',
+            'auth_is_superadmin',
+            'auth_sekolah_code01',
+            'auth_sekolah_nama',
+        ]);
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect()->route('login');

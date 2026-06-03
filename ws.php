@@ -951,6 +951,7 @@ function getSiswa(array $req): array
             TRIM(c.DESC05) AS desc05,
             TRIM(c.TOTPAY) AS totpay,
             TRIM(c.GENUS) AS genus,
+            TRIM(c.GENUS) AS wali,
             TRIM(ms.DESC01) AS unit_sekolah
         FROM scctcust c
         LEFT JOIN mst_sekolah ms ON TRIM(ms.CODE01) = TRIM(c.CODE01)
@@ -1663,6 +1664,7 @@ function exportSiswa(array $req): void
             TRIM(DESC04)             AS ANGKATAN,
             TRIM(CODE04)             AS GENDER,
             TRIM(DESC05)             AS ALAMAT,
+            TRIM(GENUS)              AS WALI,
             TRIM(GENUS)              AS AYAH,
             TRIM(GENUS1)             AS IBU,
             TRIM(EksternalInternal)  AS EKSINT,
@@ -1695,7 +1697,7 @@ function exportSiswa(array $req): void
 
     fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
-    $headers = ["NIS", "Nama", "NODAF", "UNIT", "KELAS", "KELOMPOK", "ANGKATAN", "GENDER", "ALAMAT", "AYAH", "IBU", "EKSINT", "KontakWali", "WISMA"];
+    $headers = ["NIS", "Nama", "NODAF", "UNIT", "KELAS", "KELOMPOK", "ANGKATAN", "GENDER", "ALAMAT", "WALI", "AYAH", "IBU", "EKSINT", "KontakWali", "WISMA"];
     fputcsv($out, $headers);
 
     foreach ($rows as $row) {
@@ -1709,6 +1711,7 @@ function exportSiswa(array $req): void
             $row["ANGKATAN"],
             $row["GENDER"],
             $row["ALAMAT"],
+            $row["WALI"],
             $row["AYAH"],
             $row["IBU"],
             $row["EKSINT"],
@@ -6017,7 +6020,15 @@ function cyberKeyHasColumn(PDO $pdo, string $column): bool
 }
 
 /**
- * Login user dari tabel users (username/email + bcrypt password).
+ * Superadmin = fid kosong di cyber_key; admin unit punya fid = mst_sekolah.CODE01.
+ */
+function cyberKeyIsSuperadmin(?string $fid): bool
+{
+    return trim((string) $fid) === '';
+}
+
+/**
+ * Login user dari tabel cyber_key (username + md5 password).
  *
  * @return array{user?: array<string, mixed>, error?: string}
  */
@@ -6035,12 +6046,21 @@ function loginUser(array $req): array
         ? "AND deleted_at IS NULL"
         : "";
 
+    $fidSelect = cyberKeyHasColumn($pdo, 'fid')
+        ? "TRIM(CAST(fid AS CHAR)) AS fid"
+        : "'' AS fid";
+    $kelSelect = cyberKeyHasColumn($pdo, 'kel')
+        ? "TRIM(kel) AS kel"
+        : "'' AS kel";
+
     $sql = "
         SELECT
             urut AS id,
             users AS username,
             ket AS name,
-            pw AS password
+            pw AS password,
+            {$fidSelect},
+            {$kelSelect}
         FROM demo_amalfatimah.cyber_key
         WHERE LOWER(TRIM(users)) = LOWER(TRIM(:login))
           {$whereDeletedAt}
@@ -6066,13 +6086,35 @@ function loginUser(array $req): array
         $up->execute();
     }
 
+    $fid = trim((string) ($row['fid'] ?? ''));
+    $isSuperadmin = cyberKeyIsSuperadmin($fid);
+    $sekolahNama = '';
+    if (!$isSuperadmin && $fid !== '') {
+        $stSk = $pdo->prepare("
+            SELECT TRIM(CODE01) AS code01, TRIM(DESC01) AS desc01
+            FROM mst_sekolah
+            WHERE TRIM(CODE01) = :code01
+            LIMIT 1
+        ");
+        $stSk->execute([':code01' => $fid]);
+        $sk = $stSk->fetch(PDO::FETCH_ASSOC);
+        if (is_array($sk)) {
+            $sekolahNama = trim((string) ($sk['desc01'] ?? ''));
+        }
+    }
+
     return [
         'user' => [
             'id' => $uid,
             'username' => trim((string) ($row['username'] ?? '')),
             'name' => trim((string) ($row['name'] ?? '')),
             'email' => '',
-            'unit' => '',
+            'unit' => $sekolahNama,
+            'fid' => $fid,
+            'kel' => trim((string) ($row['kel'] ?? '')),
+            'is_superadmin' => $isSuperadmin,
+            'sekolah_code01' => $isSuperadmin ? '' : $fid,
+            'sekolah_nama' => $sekolahNama,
         ],
     ];
 }

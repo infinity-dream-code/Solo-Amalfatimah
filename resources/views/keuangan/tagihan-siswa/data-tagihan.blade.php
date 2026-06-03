@@ -200,7 +200,6 @@
 
             <div class="dt-actions dt-actions--primary">
                 <a class="dt-btn dt-btn-emphasis" href="{{ route('keu.tagihan.buat') }}">+ Buat Tagihan</a>
-                <a class="dt-btn dt-btn-emphasis" href="{{ route('keu.tagihan.upload_excel') }}">Upload Excel</a>
             </div>
 
             <div class="dt-toolbar">

@@ -64,8 +64,9 @@ class DataSiswaController extends Controller
             'NO PENDAFTARAN',
             'UNIT',
             'KELAS',
-            'JENJANG',
+            'KELOMPOK',
             'ANGKATAN',
+            'WALI',
         ];
 
         $callback = static function () use ($rows, $headers): void {
@@ -81,19 +82,24 @@ class DataSiswaController extends Controller
                 $nocust = trim((string) ($r['nocust'] ?? ''));
                 $vaDigits = preg_replace('/\D+/', '', $nocust);
                 $noVa = $vaDigits !== '' ? ('7510050' . $vaDigits) : '-';
-                $c01 = trim((string) ($r['code01'] ?? ''));
-                $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
-                $unitLabel = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                $unit = trim((string) ($r['code02'] ?? ''));
+                if ($unit === '') {
+                    $c01 = trim((string) ($r['code01'] ?? ''));
+                    $uSek = trim((string) ($r['unit_sekolah'] ?? ''));
+                    $unit = ($c01 !== '' && $uSek !== '') ? ($c01 . ' — ' . $uSek) : (($uSek !== '') ? $uSek : (($c01 !== '') ? $c01 : '-'));
+                }
+                $wali = trim((string) ($r['wali'] ?? $r['genus'] ?? ''));
                 $line = [
                     (string) ($index + 1),
                     $nocust !== '' ? $nocust : '-',
                     $noVa,
                     trim((string) ($r['nmcust'] ?? '')) !== '' ? (string) $r['nmcust'] : '-',
                     trim((string) ($r['num2nd'] ?? '')) !== '' ? (string) $r['num2nd'] : '-',
-                    $unitLabel,
+                    $unit !== '' ? $unit : '-',
                     trim((string) ($r['desc02'] ?? '')) !== '' ? (string) $r['desc02'] : '-',
                     trim((string) ($r['desc03'] ?? '')) !== '' ? (string) $r['desc03'] : '-',
                     trim((string) ($r['desc04'] ?? '')) !== '' ? (string) $r['desc04'] : '-',
+                    $wali !== '' ? $wali : '-',
                 ];
                 fwrite($output, implode("\t", array_map(static fn ($v) => str_replace(["\r", "\n", "\t"], ' ', $v), $line)) . PHP_EOL);
             }

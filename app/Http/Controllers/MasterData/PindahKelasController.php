@@ -4,6 +4,7 @@ namespace App\Http\Controllers\MasterData;
 
 use App\Http\Controllers\Controller;
 use App\Services\AmalFatimahApiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -55,6 +56,39 @@ class PindahKelasController extends Controller
         ]);
     }
 
+    public function siswaOptions(Request $request, AmalFatimahApiService $api): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        $kelasSumber = (int) $request->query('kelas_sumber', 0);
+        if ($q === '' && $kelasSumber <= 0) {
+            return response()->json([]);
+        }
+
+        $res = $api->getSiswaByKelas($kelasSumber, $q !== '' ? $q : null, 40, 0);
+        if (!$res['ok']) {
+            return response()->json([]);
+        }
+
+        $out = [];
+        $seen = [];
+        foreach ($res['rows'] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $nis = trim((string) ($row['nocust'] ?? ''));
+            $nama = trim((string) ($row['nmcust'] ?? ''));
+            $value = $nis !== '' ? $nis : $nama;
+            if ($value === '' || isset($seen[$value])) {
+                continue;
+            }
+            $seen[$value] = true;
+            $text = $nis !== '' && $nama !== '' ? ($nis . ' — ' . $nama) : ($nama !== '' ? $nama : $nis);
+            $out[] = ['value' => $value, 'text' => $text];
+        }
+
+        return response()->json($out);
+    }
+
     public function create(): View
     {
         return view('master-data.pindah-kelas.create', ['pageTitle' => 'Tambah Pindah Kelas']);
@@ -65,6 +99,7 @@ class PindahKelasController extends Controller
         $validated = $request->validate([
             'kelas_sumber' => ['nullable', 'integer', 'min:0'],
             'kelas_tujuan' => ['required', 'integer', 'min:1'],
+            'mode' => ['required', 'in:semua,pilihan'],
             'custids' => ['nullable', 'array'],
             'custids.*' => ['integer', 'min:1'],
             'search' => ['nullable', 'string'],
@@ -76,24 +111,33 @@ class PindahKelasController extends Controller
         )));
         $kelasSumber = (int) ($validated['kelas_sumber'] ?? 0);
         $kelasTujuan = (int) $validated['kelas_tujuan'];
+        $mode = (string) $validated['mode'];
+        $redirectQuery = $request->only(['kelas_sumber', 'kelas_tujuan', 'search']);
+
         if ($kelasSumber > 0 && $kelasSumber === $kelasTujuan) {
-            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
+            return redirect()->route('master.pindah_kelas', $redirectQuery)
                 ->with('error', 'Kelas asal dan kelas tujuan tidak boleh sama.');
         }
 
-        $mode = count($custids) > 0 ? 'pilihan' : 'semua';
         if ($mode === 'semua' && $kelasSumber <= 0) {
-            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
-                ->with('error', 'Pindah semua siswa membutuhkan kelas asal. Atau centang siswa yang akan dipindah.');
+            return redirect()->route('master.pindah_kelas', $redirectQuery)
+                ->with('error', 'Pindah jamak membutuhkan kelas asal.');
+        }
+
+        if ($mode === 'pilihan' && $custids === []) {
+            return redirect()->route('master.pindah_kelas', $redirectQuery)
+                ->with('error', 'Pindah parsial: centang minimal satu siswa.');
         }
 
         $res = $api->pindahKelas($kelasSumber, $kelasTujuan, $mode, $custids);
         if (!$res['ok']) {
-            return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))->with('error', $res['message']);
+            return redirect()->route('master.pindah_kelas', $redirectQuery)->with('error', $res['message']);
         }
         $totalDipindah = (int) (($res['data']['total_dipindah'] ?? 0));
-        return redirect()->route('master.pindah_kelas', $request->only(['kelas_sumber', 'kelas_tujuan', 'search']))
-            ->with('status', "Pemindahan kelas berhasil. Total dipindah: {$totalDipindah}");
+        $label = $mode === 'semua' ? 'jamak' : 'parsial';
+
+        return redirect()->route('master.pindah_kelas', $redirectQuery)
+            ->with('status', "Pindah {$label} berhasil. Total dipindah: {$totalDipindah}");
     }
 
     public function edit(string $id): View
