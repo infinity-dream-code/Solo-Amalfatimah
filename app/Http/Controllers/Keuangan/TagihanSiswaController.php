@@ -940,20 +940,20 @@ XML);
      */
     private function streamRekapTagihanCsv(AmalFatimahApiService $api, array $filters): StreamedResponse|RedirectResponse
     {
-        $probe = $api->getDataTagihan($filters, self::REKAP_EXPORT_CHUNK, 0, true, [], true);
-        if (!$probe['ok']) {
+        $preflight = $api->getDataTagihan($filters, 1, 0, true, [], true);
+        if (!$preflight['ok']) {
             return redirect()->back()->with('export_error', 'Gagal mengambil data dari server. Pastikan ws.php terbaru sudah di-upload.');
         }
-        $firstRows = $probe['data']['rows'] ?? [];
-        if (!is_array($firstRows) || $firstRows === []) {
+        $preflightRows = $preflight['data']['rows'] ?? [];
+        if (!is_array($preflightRows) || $preflightRows === []) {
             return redirect()->back()->with('export_error', 'Tidak ada data yang cocok untuk export rekap.');
         }
 
         $filename = 'rekap-tagihan-' . date('Ymd-His') . '.csv';
 
-        return response()->streamDownload(function () use ($api, $filters, $firstRows, $probe) {
-            set_time_limit(600);
-            @ini_set('memory_limit', '256M');
+        return response()->streamDownload(function () use ($api, $filters) {
+            set_time_limit(900);
+            @ini_set('memory_limit', '512M');
 
             $h = fopen('php://output', 'w');
             if ($h === false) {
@@ -965,16 +965,14 @@ XML);
             $no = 1;
             $offset = 0;
             $maxRows = self::REKAP_EXPORT_MAX_ROWS;
-            $rows = $firstRows;
-            $hasMore = (bool) ($probe['data']['has_more'] ?? false);
+            $chunk = self::REKAP_EXPORT_CHUNK;
+            $firstRowKey = null;
 
-            while (true) {
-                if (!is_array($rows) || $rows === []) {
-                    break;
-                }
+            $writeBatch = static function (array $rows) use ($h, &$no, $maxRows): int {
+                $written = 0;
                 foreach ($rows as $r) {
                     if (!is_array($r) || $no > $maxRows) {
-                        break 2;
+                        break;
                     }
                     fputcsv($h, [
                         $no,
@@ -985,30 +983,64 @@ XML);
                         (int) ($r['tagihan'] ?? 0),
                     ], ';');
                     $no++;
+                    $written++;
                 }
 
-                if (!$hasMore || $no > $maxRows) {
-                    break;
-                }
+                return $written;
+            };
 
-                $offset += count($rows);
-                if ($offset >= $maxRows) {
-                    break;
-                }
+            $rowKey = static function (array $r): string {
+                return trim((string) ($r['nis'] ?? '')) . '|'
+                    . trim((string) ($r['nama_tagihan'] ?? '')) . '|'
+                    . trim((string) ($r['tahun_aka'] ?? '')) . '|'
+                    . (int) ($r['tagihan'] ?? 0);
+            };
 
-                $res = $api->getDataTagihan(
-                    $filters,
-                    self::REKAP_EXPORT_CHUNK,
-                    $offset,
-                    true,
-                    [],
-                    true
-                );
+            // Coba ambil sekaligus sampai 50k (bulk_export di ws.php).
+            $bulkRes = $api->getTagihanRekapCetak($filters, $maxRows);
+            if ($bulkRes['ok']) {
+                $bulkRows = $bulkRes['data']['rows'] ?? [];
+                if (is_array($bulkRows) && $bulkRows !== []) {
+                    if ($firstRowKey === null && isset($bulkRows[0]) && is_array($bulkRows[0])) {
+                        $firstRowKey = $rowKey($bulkRows[0]);
+                    }
+                    $written = $writeBatch($bulkRows);
+                    $offset += $written;
+                    if ($written < $chunk || $offset >= $maxRows) {
+                        fclose($h);
+
+                        return;
+                    }
+                }
+            }
+
+            // Lanjut per chunk jika bulk mentok di 5k (ws lama) atau ada sisa data.
+            while ($offset < $maxRows) {
+                $res = $api->getDataTagihan($filters, $chunk, $offset, true, [], true);
                 if (!$res['ok']) {
                     break;
                 }
                 $rows = $res['data']['rows'] ?? [];
-                $hasMore = (bool) ($res['data']['has_more'] ?? false);
+                if (!is_array($rows) || $rows === []) {
+                    break;
+                }
+
+                if ($offset > 0 && isset($rows[0]) && is_array($rows[0]) && $firstRowKey !== null) {
+                    if ($rowKey($rows[0]) === $firstRowKey) {
+                        break;
+                    }
+                }
+
+                $written = $writeBatch($rows);
+                if ($written === 0) {
+                    break;
+                }
+                $offset += $written;
+
+                if ($written < $chunk) {
+                    break;
+                }
+
                 if (function_exists('flush')) {
                     flush();
                 }

@@ -1696,7 +1696,7 @@ class AmalFatimahApiService
             $body['custids'] = array_values(array_unique($custidNums));
         }
 
-        $timeout = ($forExport || $rekapCetak) ? 180 : 45;
+        $timeout = ($forExport || $rekapCetak) ? 300 : 45;
 
         try {
             $response = Http::timeout($timeout)->post($url, $body);
@@ -1716,7 +1716,9 @@ class AmalFatimahApiService
             $data = is_array($json['data'] ?? null) ? $json['data'] : [];
             $rowList = is_array($data['rows'] ?? null) ? array_values($data['rows']) : [];
             $hasMore = (bool) ($data['has_more'] ?? false);
-            if (!$hasMore && count($rowList) > 0 && !$forExport) {
+            if (!$hasMore && count($rowList) > 0 && ($forExport || $rekapCetak)) {
+                $hasMore = count($rowList) >= $limit;
+            } elseif (!$hasMore && count($rowList) > 0 && !$forExport) {
                 $hasMore = count($rowList) >= $limit;
             }
 
@@ -1741,12 +1743,12 @@ class AmalFatimahApiService
     }
 
     /**
-     * Satu panggilan WS untuk cetak rekap tagihan PDF (maks 3000 baris).
+     * Satu panggilan WS untuk export rekap tagihan (maks 50.000 baris, bulk_export).
      *
      * @param array<string, mixed> $filters
      * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>}}
      */
-    public function getTagihanRekapCetak(array $filters, int $maxRows = 3000): array
+    public function getTagihanRekapCetak(array $filters, int $maxRows = 50000): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -1768,7 +1770,7 @@ class AmalFatimahApiService
         ], static fn ($v) => $v !== ''));
 
         try {
-            $response = Http::timeout(120)->post($url, $body);
+            $response = Http::timeout(300)->post($url, $body);
             $json = $response->json();
             if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
                 return [
