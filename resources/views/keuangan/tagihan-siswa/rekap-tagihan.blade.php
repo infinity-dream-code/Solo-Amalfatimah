@@ -153,7 +153,13 @@
                     </thead>
                     <tbody>
                         @forelse ($rekapRows as $r)
-                            @php $row = is_array($r) ? $r : (array) $r; @endphp
+                            @php
+                                $row = is_array($r) ? $r : (array) $r;
+                                $rkCell = static function (array $row, string $key, string $fallback = ''): string {
+                                    $v = trim((string) ($row[$key] ?? $fallback));
+                                    return $v !== '' ? $v : '-';
+                                };
+                            @endphp
                             <tr>
                                 <td class="rk-check">
                                     <input
@@ -164,19 +170,19 @@
                                     >
                                 </td>
                                 <td>{{ ($rekapRows->firstItem() ?? 0) + $loop->index }}</td>
-                                <td>{{ trim((string) ($row['rek'] ?? '-')) !== '' ? $row['rek'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['kelas'] ?? '-')) !== '' ? $row['kelas'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['kelompok'] ?? '-')) !== '' ? $row['kelompok'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['angkatan'] ?? '-')) !== '' ? $row['angkatan'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['kode'] ?? '-')) !== '' ? $row['kode'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['nama_post'] ?? '-')) !== '' ? $row['nama_post'] : '-' }}</td>
+                                <td>{{ $rkCell($row, 'rek') }}</td>
+                                <td>{{ $rkCell($row, 'kelas') }}</td>
+                                <td>{{ $rkCell($row, 'kelompok') }}</td>
+                                <td>{{ $rkCell($row, 'angkatan') }}</td>
+                                <td>{{ $rkCell($row, 'kode', (string) ($row['billcd'] ?? '')) }}</td>
+                                <td>{{ $rkCell($row, 'nama_post', (string) ($row['nama_tagihan'] ?? '')) }}</td>
                                 <td class="rk-num">{{ number_format((int) ($row['tagihan'] ?? 0), 0, ',', '.') }}</td>
-                                <td>{{ trim((string) ($row['nis'] ?? '-')) !== '' ? $row['nis'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['no_va'] ?? '-')) !== '' ? $row['no_va'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['nama'] ?? '-')) !== '' ? $row['nama'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['unit'] ?? '-')) !== '' ? $row['unit'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['nama_tagihan'] ?? '-')) !== '' ? $row['nama_tagihan'] : '-' }}</td>
-                                <td>{{ trim((string) ($row['tahun_aka'] ?? '-')) !== '' ? $row['tahun_aka'] : '-' }}</td>
+                                <td>{{ $rkCell($row, 'nis') }}</td>
+                                <td>{{ $rkCell($row, 'no_va') }}</td>
+                                <td>{{ $rkCell($row, 'nama') }}</td>
+                                <td>{{ $rkCell($row, 'unit') }}</td>
+                                <td>{{ $rkCell($row, 'nama_tagihan') }}</td>
+                                <td>{{ $rkCell($row, 'tahun_aka') }}</td>
                                 <td class="rk-center">{{ (int) ($row['furutan'] ?? 0) }}</td>
                             </tr>
                         @empty

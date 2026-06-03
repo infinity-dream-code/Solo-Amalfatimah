@@ -1045,6 +1045,35 @@ XML);
     }
 
     /**
+     * Kolom tampilan Rekap Tagihan (rek, angkatan, kode, nama_post) dari baris getDataTagihan.
+     *
+     * @param list<mixed> $apiRows
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeRekapTagihanRows(array $apiRows): array
+    {
+        $out = [];
+        foreach ($apiRows as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $billcd = trim((string) ($r['billcd'] ?? ''));
+            $namaTagihan = trim((string) ($r['nama_tagihan'] ?? ''));
+            $out[] = array_merge($r, [
+                'rek' => trim((string) ($r['rek'] ?? $r['billac'] ?? '')),
+                'angkatan' => trim((string) ($r['angkatan'] ?? $r['desc04'] ?? '')),
+                'kode' => trim((string) ($r['kode'] ?? $billcd)),
+                'nama_post' => trim((string) ($r['nama_post'] ?? $namaTagihan)),
+                'billcd' => $billcd,
+                'custid' => (int) ($r['custid'] ?? 0),
+                'furutan' => (int) ($r['furutan'] ?? 0),
+            ]);
+        }
+
+        return $out;
+    }
+
+    /**
      * @param list<array<string, mixed>> $apiRows
      * @return list<array<string, mixed>>
      */
@@ -1403,7 +1432,8 @@ XML);
         if ($hasSearchRequest) {
             $res = $api->getDataTagihan($filters, $perPage, ($page - 1) * $perPage);
             if ($res['ok']) {
-                $rows = $res['data']['rows'] ?? [];
+                $raw = $res['data']['rows'] ?? [];
+                $rows = $this->normalizeRekapTagihanRows($raw);
                 $total = (int) ($res['data']['total'] ?? 0);
             } else {
                 $errorMsg = $res['message'] ?? 'Gagal memuat data.';

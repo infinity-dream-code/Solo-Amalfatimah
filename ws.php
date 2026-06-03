@@ -3482,7 +3482,11 @@ function getDataTagihan(array $req): array
             TRIM(b.BTA) AS tahun_aka,
             COALESCE(b.FUrutan, b.furutan, 0) AS furutan,
             TRIM(CAST(b.AA AS CHAR)) AS aa,
-            TRIM(CAST(b.PAIDST AS CHAR)) AS paidst
+            TRIM(CAST(b.PAIDST AS CHAR)) AS paidst,
+            TRIM(b.BILLAC) AS rek,
+            TRIM(c.DESC04) AS angkatan,
+            TRIM(b.BILLCD) AS kode,
+            TRIM(b.BILLNM) AS nama_post
         FROM scctbill b
         INNER JOIN scctcust c ON c.CUSTID = b.CUSTID
         LEFT JOIN mst_kelas mk ON mk.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
