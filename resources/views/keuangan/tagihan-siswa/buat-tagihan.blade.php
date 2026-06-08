@@ -67,10 +67,9 @@
                             @php
                                 $id = (string) ($k['id'] ?? '');
                                 $un = (string) ($k['unit'] ?? '');
-                                $kl = (string) ($k['kelas'] ?? '');
-                                $kp = (string) ($k['kelompok'] ?? '');
-                                $jg = (string) ($k['jenjang'] ?? '');
-                                $parts = array_values(array_filter([$un, $kl, $kp, $jg], static fn ($v) => $v !== ''));
+                                $klKelas = (string) ($k['jenjang'] ?? '');
+                                $klKelompok = (string) ($k['kelas'] ?? '');
+                                $parts = array_values(array_filter([$un, $klKelas, $klKelompok], static fn ($v) => $v !== ''));
                                 $lbl = implode(' - ', $parts);
                             @endphp
                             @if ($id !== '' && $lbl !== '')

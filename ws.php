@@ -853,6 +853,13 @@ function createAkun(array $req): array
     ];
 }
 
+/** JOIN scctcust.CODE03 → mst_kelas.id (hanya bila CODE03 berisi angka). */
+function scctcustJoinMstKelasSql(string $custAlias = 'c', string $mkAlias = 'mk'): string
+{
+    return "LEFT JOIN mst_kelas {$mkAlias} ON TRIM({$custAlias}.CODE03) REGEXP '^[0-9]+$'
+        AND {$mkAlias}.id = CAST(TRIM({$custAlias}.CODE03) AS UNSIGNED)";
+}
+
 /**
  * @return array{0: list<string>, 1: array<string, mixed>}
  */
@@ -892,8 +899,18 @@ function scctcustSiswaWhereFromReq(array $req, string $tableAlias = ""): array
     }
 
     if (!empty($req["DESC02"])) {
-        $where[] = "TRIM({$p}DESC02) = :DESC02";
-        $params[":DESC02"] = trim((string) $req["DESC02"]);
+        $d02 = trim((string) $req["DESC02"]);
+        $where[] = "(
+            TRIM({$p}DESC02) = :DESC02
+            OR EXISTS (
+                SELECT 1 FROM mst_kelas mkf
+                WHERE TRIM({$p}CODE03) REGEXP '^[0-9]+$'
+                  AND mkf.id = CAST(TRIM({$p}CODE03) AS UNSIGNED)
+                  AND TRIM(mkf.jenjang) = :DESC02_MK
+            )
+        )";
+        $params[":DESC02"] = $d02;
+        $params[":DESC02_MK"] = $d02;
     }
 
     if (isset($req["STCUST"]) && $req["STCUST"] !== "") {
@@ -941,10 +958,10 @@ function getSiswa(array $req): array
             c.STCUST AS stcust,
             TRIM(c.CODE01) AS code01,
             TRIM(c.DESC01) AS desc01,
-            TRIM(c.CODE02) AS code02,
-            TRIM(c.DESC02) AS desc02,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS code02,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS desc02,
             TRIM(c.CODE03) AS code03,
-            TRIM(c.DESC03) AS desc03,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS desc03,
             TRIM(c.CODE04) AS code04,
             TRIM(c.DESC04) AS desc04,
             TRIM(c.CODE05) AS code05,
@@ -955,6 +972,7 @@ function getSiswa(array $req): array
             TRIM(ms.DESC01) AS unit_sekolah
         FROM scctcust c
         LEFT JOIN mst_sekolah ms ON TRIM(ms.CODE01) = TRIM(c.CODE01)
+        " . scctcustJoinMstKelasSql('c', 'mk') . "
     ";
 
     if ($where !== []) {
@@ -1098,14 +1116,21 @@ function getFilterSiswa(): array
     }
     $sekolah = array_values($sekolahByCode);
 
-    $stmtKelas = $pdo->prepare("
-        SELECT DISTINCT TRIM(CODE02) AS CODE02, TRIM(DESC02) AS DESC02
-        FROM scctcust
-        WHERE DESC02 IS NOT NULL AND TRIM(DESC02) != ''
+    $stmtKelas = $pdo->query("
+        SELECT DISTINCT
+            TRIM(mk.unit) AS CODE02,
+            TRIM(mk.jenjang) AS DESC02
+        FROM mst_kelas mk
+        WHERE mk.jenjang IS NOT NULL AND TRIM(mk.jenjang) <> ''
+        UNION
+        SELECT DISTINCT
+            TRIM(c.CODE02) AS CODE02,
+            TRIM(c.DESC02) AS DESC02
+        FROM scctcust c
+        WHERE c.DESC02 IS NOT NULL AND TRIM(c.DESC02) <> ''
         ORDER BY CODE02 ASC, DESC02 ASC
     ");
-    $stmtKelas->execute();
-    $kelas = $stmtKelas->fetchAll();
+    $kelas = $stmtKelas ? $stmtKelas->fetchAll() : [];
 
     return [
         "angkatan" => $angkatan,
@@ -1138,10 +1163,10 @@ function getSiswaByCustid(array $req): array
             c.STCUST AS stcust,
             TRIM(c.CODE01) AS code01,
             TRIM(c.DESC01) AS desc01,
-            TRIM(c.CODE02) AS code02,
-            TRIM(c.DESC02) AS desc02,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS code02,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS desc02,
             TRIM(c.CODE03) AS code03,
-            TRIM(c.DESC03) AS desc03,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS desc03,
             TRIM(c.CODE04) AS code04,
             TRIM(c.DESC04) AS desc04,
             TRIM(c.CODE05) AS code05,
@@ -1151,6 +1176,7 @@ function getSiswaByCustid(array $req): array
             TRIM(ms.DESC01) AS unit_sekolah
         FROM scctcust c
         LEFT JOIN mst_sekolah ms ON TRIM(ms.CODE01) = TRIM(c.CODE01)
+        " . scctcustJoinMstKelasSql('c', 'mk') . "
         WHERE c.CUSTID = :CUSTID
     ");
 
@@ -1626,6 +1652,111 @@ function createBebanPost(array $req): array
     ];
 }
 
+/**
+ * @return array{id: int, jenjang: string, kelas: string, unit: string}
+ */
+function mapMstKelasRow(array $row): array
+{
+    return [
+        'id' => (int) ($row['id'] ?? 0),
+        'jenjang' => trim((string) ($row['jenjang'] ?? '')),
+        'kelas' => trim((string) ($row['kelas'] ?? '')),
+        'unit' => trim((string) ($row['unit'] ?? '')),
+    ];
+}
+
+/**
+ * Import: kolom KELAS boleh id numerik atau nama (jenjang/kelas di mst_kelas).
+ *
+ * @return array{id: int, jenjang: string, kelas: string, unit: string}|null
+ */
+function resolveKelasForSiswaImport(PDO $pdo, string $unit, string $kelasInput, string $kelompok): ?array
+{
+    $unit = trim($unit);
+    $kelasInput = trim($kelasInput);
+    $kelompok = trim($kelompok);
+
+    if ($kelasInput === '' && $kelompok === '' && $unit === '') {
+        return null;
+    }
+
+    if ($kelasInput !== '' && preg_match('/^\d+$/', $kelasInput)) {
+        $st = $pdo->prepare('SELECT id, jenjang, kelas, unit FROM mst_kelas WHERE id = :id LIMIT 1');
+        $st->execute([':id' => (int) $kelasInput]);
+        $byId = $st->fetch(PDO::FETCH_ASSOC);
+
+        return $byId ? mapMstKelasRow($byId) : null;
+    }
+
+    $candidates = [];
+
+    if ($kelasInput !== '') {
+        $sql = "
+            SELECT id, jenjang, kelas, unit
+            FROM mst_kelas
+            WHERE TRIM(jenjang) = :nama OR TRIM(kelas) = :nama2
+        ";
+        $params = [':nama' => $kelasInput, ':nama2' => $kelasInput];
+        if ($kelompok !== '') {
+            $sql .= ' AND TRIM(kelas) = :kelompok';
+            $params[':kelompok'] = $kelompok;
+        }
+        if ($unit !== '') {
+            $sql .= ' AND (TRIM(unit) = :unit OR TRIM(unit) LIKE :unit_like)';
+            $params[':unit'] = $unit;
+            $params[':unit_like'] = '%' . $unit . '%';
+        }
+        $sql .= ' ORDER BY (TRIM(jenjang) = :nama_ord) DESC, id ASC LIMIT 5';
+        $params[':nama_ord'] = $kelasInput;
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $candidates = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } elseif ($kelompok !== '' && $unit !== '') {
+        $st = $pdo->prepare("
+            SELECT id, jenjang, kelas, unit
+            FROM mst_kelas
+            WHERE TRIM(kelas) = :kelompok
+              AND (TRIM(unit) = :unit OR TRIM(unit) LIKE :unit_like)
+            ORDER BY id ASC
+            LIMIT 5
+        ");
+        $st->execute([
+            ':kelompok' => $kelompok,
+            ':unit' => $unit,
+            ':unit_like' => '%' . $unit . '%',
+        ]);
+        $candidates = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    if ($candidates === []) {
+        return null;
+    }
+
+    return mapMstKelasRow($candidates[0]);
+}
+
+function resolveKelasForSiswaImportMessage(string $kelasInput, string $kelompok, ?array $row): string
+{
+    $kelasInput = trim($kelasInput);
+    $kelompok = trim($kelompok);
+    if ($row !== null) {
+        return '';
+    }
+    if ($kelasInput !== '' && preg_match('/^\d+$/', $kelasInput)) {
+        return "ID kelas '{$kelasInput}' tidak ditemukan di Master Kelas.";
+    }
+    if ($kelasInput !== '') {
+        return "Nama kelas '{$kelasInput}' tidak ditemukan di Master Kelas"
+            . ($kelompok !== '' ? " (kelompok: {$kelompok})" : '')
+            . '.';
+    }
+    if ($kelompok !== '') {
+        return "Kelas dengan kelompok '{$kelompok}' tidak ditemukan di Master Kelas.";
+    }
+
+    return 'Kelas tidak ditemukan di Master Kelas.';
+}
+
 function exportSiswa(array $req): void
 {
     $pdo = dbConnectPdo();
@@ -1634,50 +1765,64 @@ function exportSiswa(array $req): void
     $params = [];
 
     if (!empty($req["DESC04"])) {
-        $where[] = "TRIM(DESC04) = :DESC04";
+        $where[] = "TRIM(c.DESC04) = :DESC04";
         $params[":DESC04"] = trim($req["DESC04"]);
     }
 
     if (!empty($req["CODE02"])) {
-        $where[] = "TRIM(CODE02) = :CODE02";
+        $where[] = "TRIM(c.CODE02) = :CODE02";
         $params[":CODE02"] = trim($req["CODE02"]);
     }
 
     if (!empty($req["DESC02"])) {
-        $where[] = "TRIM(DESC02) = :DESC02";
+        $where[] = "(
+            TRIM(c.DESC02) = :DESC02
+            OR EXISTS (
+                SELECT 1 FROM mst_kelas mkf
+                WHERE TRIM(c.CODE03) REGEXP '^[0-9]+$'
+                  AND mkf.id = CAST(TRIM(c.CODE03) AS UNSIGNED)
+                  AND TRIM(mkf.jenjang) = :DESC02_EX
+            )
+        )";
         $params[":DESC02"] = trim($req["DESC02"]);
+        $params[":DESC02_EX"] = trim($req["DESC02"]);
     }
 
     if (isset($req["STCUST"]) && $req["STCUST"] !== "") {
-        $where[] = "STCUST = :STCUST";
+        $where[] = "c.STCUST = :STCUST";
         $params[":STCUST"] = trim($req["STCUST"]);
     }
 
     $sql = "
         SELECT
-            TRIM(NOCUST)             AS NIS,
-            TRIM(NMCUST)             AS Nama,
-            TRIM(NUM2ND)             AS NODAF,
-            TRIM(CODE02)             AS UNIT,
-            TRIM(CODE03)             AS KELAS,
-            TRIM(DESC03)             AS KELOMPOK,
-            TRIM(DESC04)             AS ANGKATAN,
-            TRIM(CODE04)             AS GENDER,
-            TRIM(DESC05)             AS ALAMAT,
-            TRIM(GENUS)              AS WALI,
-            TRIM(GENUS)              AS AYAH,
-            TRIM(GENUS1)             AS IBU,
-            TRIM(EksternalInternal)  AS EKSINT,
-            TRIM(GENUSContact)       AS KontakWali,
-            TRIM(GetWisma)           AS WISMA
-        FROM scctcust
+            TRIM(c.NOCUST) AS NIS,
+            TRIM(c.NMCUST) AS Nama,
+            TRIM(c.NUM2ND) AS NODAF,
+            COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS UNIT,
+            CASE
+                WHEN mk.id IS NOT NULL THEN CAST(mk.id AS CHAR)
+                WHEN TRIM(c.CODE03) REGEXP '^[0-9]+$' THEN TRIM(c.CODE03)
+                ELSE COALESCE(NULLIF(TRIM(c.DESC02), ''), TRIM(c.CODE03), '')
+            END AS KELAS,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS KELOMPOK,
+            TRIM(c.DESC04) AS ANGKATAN,
+            TRIM(c.CODE04) AS GENDER,
+            TRIM(c.DESC05) AS ALAMAT,
+            TRIM(c.GENUS) AS WALI,
+            TRIM(c.GENUS) AS AYAH,
+            TRIM(c.GENUS1) AS IBU,
+            TRIM(c.EksternalInternal) AS EKSINT,
+            TRIM(c.GENUSContact) AS KontakWali,
+            TRIM(c.GetWisma) AS WISMA
+        FROM scctcust c
+        " . scctcustJoinMstKelasSql('c', 'mk') . "
     ";
 
     if (!empty($where)) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }
 
-    $sql .= " ORDER BY NMCUST ASC";
+    $sql .= " ORDER BY c.NMCUST ASC";
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $key => $val) {
@@ -1867,6 +2012,28 @@ function importSiswa(array $req): array
         $wali       = $colGet("WALI", $row);
         $waliNama   = $wali !== "" ? $wali : ($ayah !== "" ? $ayah : $ibu);
 
+        $kelasRow = resolveKelasForSiswaImport($pdo, $unit, $kelas, $kelompok);
+        $code02 = $unit !== '' ? $unit : null;
+        $code03 = null;
+        $desc02 = null;
+        $desc03 = $kelompok !== '' ? $kelompok : null;
+
+        if ($kelasRow) {
+            $code03 = (string) $kelasRow['id'];
+            $desc02 = $kelasRow['jenjang'] !== '' ? $kelasRow['jenjang'] : null;
+            $desc03 = $kelasRow['kelas'] !== '' ? $kelasRow['kelas'] : $desc03;
+            if ($code02 === null && $kelasRow['unit'] !== '') {
+                $code02 = $kelasRow['unit'];
+            }
+        } elseif ($kelas !== '' || ($unit !== '' && $kelompok !== '')) {
+            $errors[] = [
+                'nis' => $nis,
+                'error' => resolveKelasForSiswaImportMessage($kelas, $kelompok, null),
+            ];
+            $skipped++;
+            continue;
+        }
+
         try {
             $check = $pdo->prepare("SELECT 1 FROM scctcust WHERE TRIM(NOCUST) = :nis LIMIT 1");
             $check->execute([":nis" => $nis]);
@@ -1878,6 +2045,7 @@ function importSiswa(array $req): array
                         NMCUST            = :NMCUST,
                         NUM2ND            = :NUM2ND,
                         CODE02            = :CODE02,
+                        DESC02            = :DESC02,
                         CODE03            = :CODE03,
                         DESC03            = :DESC03,
                         DESC04            = :DESC04,
@@ -1890,9 +2058,10 @@ function importSiswa(array $req): array
                 $upd->execute([
                     ":NMCUST"            => $nama !== "" ? $nama : null,
                     ":NUM2ND"            => $nodaf !== "" ? $nodaf : null,
-                    ":CODE02"            => $unit !== "" ? $unit : null,
-                    ":CODE03"            => $kelas !== "" ? $kelas : null,
-                    ":DESC03"            => $kelompok !== "" ? $kelompok : null,
+                    ":CODE02"            => $code02,
+                    ":DESC02"            => $desc02,
+                    ":CODE03"            => $code03,
+                    ":DESC03"            => $desc03,
                     ":DESC04"            => $angkatan !== "" ? $angkatan : null,
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
@@ -1904,18 +2073,19 @@ function importSiswa(array $req): array
             } else {
                 $ins = $pdo->prepare("
                     INSERT INTO scctcust
-                        (NOCUST, NMCUST, NUM2ND, CODE02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS)
+                        (NOCUST, NMCUST, NUM2ND, CODE02, DESC02, CODE03, DESC03, DESC04, CODE04, DESC05, GENUS)
                     VALUES
-                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS)
+                        (:NOCUST, :NMCUST, :NUM2ND, :CODE02, :DESC02, :CODE03, :DESC03, :DESC04, :CODE04, :DESC05, :GENUS)
                 ");
 
                 $ins->execute([
                     ":NOCUST"            => $nis,
                     ":NMCUST"            => $nama !== "" ? $nama : null,
                     ":NUM2ND"            => $nodaf !== "" ? $nodaf : null,
-                    ":CODE02"            => $unit !== "" ? $unit : null,
-                    ":CODE03"            => $kelas !== "" ? $kelas : null,
-                    ":DESC03"            => $kelompok !== "" ? $kelompok : null,
+                    ":CODE02"            => $code02,
+                    ":DESC02"            => $desc02,
+                    ":CODE03"            => $code03,
+                    ":DESC03"            => $desc03,
                     ":DESC04"            => $angkatan !== "" ? $angkatan : null,
                     ":CODE04"            => $gender !== "" ? $gender : null,
                     ":DESC05"            => $alamat !== "" ? $alamat : null,
@@ -2203,7 +2373,7 @@ function getSiswaByKelas(array $req): array
             TRIM(c.DESC04) AS DESC04,
             c.STCUST
         FROM scctcust c
-        LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
+        " . scctcustJoinMstKelasSql('c', 'mk') . "
         WHERE $whereStr
         ORDER BY c.NMCUST ASC
         LIMIT :limit OFFSET :offset

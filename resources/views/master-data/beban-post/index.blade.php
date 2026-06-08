@@ -145,11 +145,10 @@
                                     @foreach (($filterOptions['kelas'] ?? []) as $kls)
                                         @php
                                             $kp = (string) ($kls['id'] ?? $kls['kode_prod'] ?? '');
-                                            $nk = (string) ($kls['kelas'] ?? $kls['nama_kelas'] ?? '');
                                             $un = (string) ($kls['unit'] ?? '');
-                                            $kl = (string) ($kls['kelompok'] ?? '');
-                                            $jg = (string) ($kls['jenjang'] ?? '');
-                                            $parts = array_values(array_filter([$un, $nk, $kl, $jg], static fn ($v) => $v !== ''));
+                                            $klKelas = (string) ($kls['jenjang'] ?? '');
+                                            $klKelompok = (string) ($kls['kelas'] ?? $kls['nama_kelas'] ?? '');
+                                            $parts = array_values(array_filter([$un, $klKelas, $klKelompok], static fn ($v) => $v !== ''));
                                             $label = implode(' - ', $parts);
                                         @endphp
                                         @if ($kp !== '' && $label !== '')

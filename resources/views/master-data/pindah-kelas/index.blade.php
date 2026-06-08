@@ -146,10 +146,9 @@
                             @php
                                 $kid = (int) ($k['id'] ?? 0);
                                 $un = trim((string) ($k['unit'] ?? ''));
-                                $kl = trim((string) ($k['kelas'] ?? ''));
-                                $kp = trim((string) ($k['kelompok'] ?? ''));
-                                $jg = trim((string) ($k['jenjang'] ?? ''));
-                                $parts = array_values(array_filter([$un, $kl, $kp, $jg], static fn ($v) => $v !== ''));
+                                $klKelas = trim((string) ($k['jenjang'] ?? ''));
+                                $klKelompok = trim((string) ($k['kelas'] ?? ''));
+                                $parts = array_values(array_filter([$un, $klKelas, $klKelompok], static fn ($v) => $v !== ''));
                                 $label = implode(' - ', $parts);
                             @endphp
                             @if ($kid > 0 && $label !== '')
@@ -168,10 +167,9 @@
                             @php
                                 $kid = (int) ($k['id'] ?? 0);
                                 $un = trim((string) ($k['unit'] ?? ''));
-                                $kl = trim((string) ($k['kelas'] ?? ''));
-                                $kp = trim((string) ($k['kelompok'] ?? ''));
-                                $jg = trim((string) ($k['jenjang'] ?? ''));
-                                $parts = array_values(array_filter([$un, $kl, $kp, $jg], static fn ($v) => $v !== ''));
+                                $klKelas = trim((string) ($k['jenjang'] ?? ''));
+                                $klKelompok = trim((string) ($k['kelas'] ?? ''));
+                                $parts = array_values(array_filter([$un, $klKelas, $klKelompok], static fn ($v) => $v !== ''));
                                 $label = implode(' - ', $parts);
                             @endphp
                             @if ($kid > 0 && $label !== '')
