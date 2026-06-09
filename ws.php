@@ -2760,7 +2760,7 @@ function getBuatTagihan(array $req): array
             TRIM(c.NMCUST) AS NAMA,
             TRIM(c.CODE01) AS CODE01,
             TRIM(c.CODE03) AS kelas_id,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02)) AS KELAS,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02)) AS KELAS,
             COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC03)) AS JENJANG,
             TRIM(c.DESC04) AS ANGKATAN,
             TRIM(c.CODE02) AS unit
@@ -3137,8 +3137,8 @@ function enrichTagihanExcelRows(array $req): array
             TRIM(c.NUM2ND) AS NUM2ND_RAW,
             TRIM(c.NMCUST) AS NAMA,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS SEKOLAH,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS KELAS,
-            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS KELOMPOK
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS KELAS,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS KELOMPOK
         FROM scctcust c
         LEFT JOIN mst_kelas mk ON CAST(mk.id AS CHAR) = TRIM(c.CODE03)
         WHERE " . implode(' OR ', $whereParts);
@@ -3685,8 +3685,8 @@ function getDataTagihan(array $req): array
             CONCAT('7510050', COALESCE(NULLIF(TRIM(c.NOCUST), ''), '0')) AS no_va,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
-            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS kelompok,
             TRIM(b.BILLNM) AS nama_tagihan,
             COALESCE(b.BILLAM, 0) AS tagihan,
             TRIM(b.BTA) AS tahun_aka,
@@ -3836,8 +3836,8 @@ function getTagihanKartuSiswa(array $req): array
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
-            COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS kelompok,
             TRIM(b.BILLNM) AS nama_tagihan,
             COALESCE(b.BILLAM, 0) AS tagihan,
             TRIM(b.BTA) AS tahun_aka,
@@ -4097,7 +4097,7 @@ function getDataPenerimaan(array $req): array
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(b.BILLNM) AS nama_tagihan,
             b.BILLAM AS tagihan,
             {$sqlMetode} AS metode,
@@ -4306,7 +4306,7 @@ function getKartuSiswaPenerimaan(array $req): array
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(b.BILLNM) AS nama_tagihan,
             b.BILLAM AS tagihan,
             {$sqlMetode} AS metode,
@@ -4579,8 +4579,8 @@ function getDataPembayaranPerNis(array $req): array
                 CAST(COALESCE(b.BILLAM, 0) AS SIGNED) AS billam,
                 TRIM(c.DESC04) AS tahun_masuk,
                 COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-                COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
-                COALESCE(NULLIF(TRIM(mk.kelompok), ''), TRIM(c.DESC03), '') AS kelompok,
+                COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
+                COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC03), '') AS kelompok,
                 TRIM(c.NOCUST) AS nis,
                 TRIM(c.NMCUST) AS nama
             FROM scctbill b
@@ -4744,7 +4744,7 @@ function getHapusTagihanRows(array $req): array
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(b.BILLNM) AS nama_tagihan,
             CAST(COALESCE(b.BILLAM, 0) AS SIGNED) AS tagihan,
             TRIM(b.BTA) AS tahun_aka
@@ -4957,7 +4957,7 @@ function getCekPelunasanCards(array $req): array
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(COALESCE(c.DESC03, '')) AS kelompok,
             TRIM(b.BTA) AS tahun_aka,
             TRIM(b.BILLNM) AS nama_tagihan,
@@ -5484,7 +5484,7 @@ function getSaldoVirtualAccountRows(array $req): array
             TRIM(c.NMCUST) AS nama,
             TRIM(c.NUM2ND) AS no_pendaftaran,
             COALESCE(NULLIF(TRIM(mk.unit), ''), TRIM(c.CODE02), '') AS unit,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(c.DESC01) AS jenjang,
             TRIM(c.DESC04) AS angkatan,
             COALESCE(tr.saldo_net, 0) AS saldo
@@ -5561,7 +5561,7 @@ function getSaldoVirtualAccountMutasi(array $req): array
             c.CUSTID AS custid,
             TRIM(c.NOCUST) AS nis,
             TRIM(c.NMCUST) AS nama,
-            COALESCE(NULLIF(TRIM(mk.kelas), ''), TRIM(c.DESC02), '') AS kelas,
+            COALESCE(NULLIF(TRIM(mk.jenjang), ''), TRIM(c.DESC02), '') AS kelas,
             TRIM(c.DESC04) AS angkatan,
             TRIM(c.CODE02) AS unit
         FROM scctcust c

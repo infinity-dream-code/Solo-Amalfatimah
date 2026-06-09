@@ -95,7 +95,7 @@ class BebanPostController extends Controller
             'kode_akun' => ['required', 'string', 'max:10'],
             'nominal' => ['required', 'string', 'max:50'],
         ], [
-            'thn_masuk.required' => 'Tahun Akademik wajib diisi.',
+            'thn_masuk.required' => 'Tahun Angkatan wajib diisi.',
             'kode_prod.required' => 'Kelas wajib dipilih.',
             'kode_akun.required' => 'Kode Akun wajib dipilih.',
             'nominal.required' => 'Nominal wajib diisi.',

@@ -77,7 +77,7 @@
 
     <div class="page-heading">
         <h2>Tambah Beban Post</h2>
-        <p>Isi data Tahun Akademik, Kelas, Kode Akun, dan Nominal.</p>
+        <p>Isi data Tahun Angkatan, Kelas, Kode Akun, dan Nominal.</p>
     </div>
 
     <div class="bp-form-card">
@@ -89,9 +89,9 @@
                 @endif
                 <div class="bp-field-wrap">
                     <div>
-                        <label class="bp-label">Tahun Akademik <span class="bp-required">*</span></label>
+                        <label class="bp-label">Tahun Angkatan <span class="bp-required">*</span></label>
                         <select name="thn_masuk" class="bp-input" required>
-                            <option value="">Pilih Tahun Akademik</option>
+                            <option value="">Pilih Tahun Angkatan</option>
                             @foreach (($thnAkaOptions ?? []) as $thn)
                                 @php
                                     $label = is_array($thn)
