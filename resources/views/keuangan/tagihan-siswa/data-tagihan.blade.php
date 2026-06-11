@@ -59,6 +59,17 @@
         .dt-col-no { width: 42px; text-align: center; white-space: nowrap; }
         .dt-center { text-align: center; }
         .dt-num { text-align: right; }
+        .dt-th-sort a {
+            color: inherit;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .dt-th-sort a:hover { color: #4f46e5; }
+        .dt-th-sort.is-active a { color: #4f46e5; }
         .dt-urut-actions { display: flex; flex-direction: column; gap: 4px; }
         .dt-urut-actions button {
             font-size: 11px; padding: 4px 6px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; font-weight: 600;
@@ -133,11 +144,16 @@
                     'nis' => $filters['nis'] ?? '',
                     'nama' => $filters['nama'] ?? '',
                     'siswa' => $filters['siswa'] ?? '',
+                    'sort_urutan' => $filters['sort_urutan'] ?? 'asc',
                 ], static fn ($v) => $v !== '' && $v !== null));
                 $dtPrintUrl = route('keu.tagihan.data_print') . ($dtPrintQs !== '' ? '?' . $dtPrintQs : '');
+                $sortUrutanCur = ($filters['sort_urutan'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
+                $sortUrutanNext = $sortUrutanCur === 'asc' ? 'desc' : 'asc';
+                $sortUrutanQuery = array_merge(request()->query(), ['sort_urutan' => $sortUrutanNext, 'page' => 1]);
             @endphp
 
             <form method="GET" action="{{ route('keu.tagihan.data') }}">
+                <input type="hidden" name="sort_urutan" value="{{ $sortUrutanCur }}">
                 <div class="dt-filter">
                     <div class="dt-fld">
                         <label>Tanggal pembuatan (dari)</label>
@@ -238,26 +254,26 @@
 
             <form id="dtFormExcel" class="dt-sr-only" method="POST" action="{{ route('keu.tagihan.data_export_excel') }}" aria-hidden="true">
                 @csrf
-                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa'] as $fk)
+                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa', 'sort_urutan'] as $fk)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
             </form>
             <form id="dtFormPdf" class="dt-sr-only" method="POST" action="{{ route('keu.tagihan.data_export_pdf') }}" aria-hidden="true">
                 @csrf
-                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa'] as $fk)
+                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa', 'sort_urutan'] as $fk)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
             </form>
             <form id="dtFormKartu" class="dt-sr-only" method="POST" action="{{ route('keu.tagihan.data_print_kartu') }}" aria-hidden="true">
                 @csrf
-                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa'] as $fk)
+                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa', 'sort_urutan'] as $fk)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
                 <input type="hidden" name="selected_rows" id="dtSelectedRows" value="">
             </form>
             <form id="dtFormRekap" class="dt-sr-only" method="POST" action="{{ route('keu.tagihan.data_print_rekap') }}" aria-hidden="true">
                 @csrf
-                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa'] as $fk)
+                @foreach (['tgl_dari', 'tgl_sampai', 'thn_angkatan', 'thn_akademik', 'kelas_id', 'nama_tagihan', 'nis', 'nama', 'siswa', 'sort_urutan'] as $fk)
                     <input type="hidden" name="{{ $fk }}" value="{{ $filters[$fk] ?? '' }}">
                 @endforeach
                 <input type="hidden" name="has_search_context" value="1">
@@ -274,7 +290,11 @@
                             <th>Nama</th>
                             <th>Nama Tagihan</th>
                             <th class="dt-num">Jumlah</th>
-                            <th class="dt-center">Urutan Bayar</th>
+                            <th class="dt-center dt-th-sort is-active">
+                                <a href="{{ route('keu.tagihan.data', $sortUrutanQuery) }}" title="Klik untuk urutkan {{ $sortUrutanNext === 'asc' ? 'naik' : 'turun' }}">
+                                    Urutan Bayar <span aria-hidden="true">{{ $sortUrutanCur === 'asc' ? '↑' : '↓' }}</span>
+                                </a>
+                            </th>
                             <th class="dt-center">Tgl Tagih</th>
                             <th>Tahun Tagihan</th>
                             <th>Naik</th>
