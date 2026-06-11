@@ -303,7 +303,6 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @php $lastCustid = null; @endphp
                         @forelse ($tagihanRows as $index => $row)
                             @php
                                 $r = is_array($row) ? $row : (array) $row;
@@ -317,8 +316,6 @@
                                 $aa = trim((string) ($r['aa'] ?? ''));
                                 $paidRaw = $r['paidst'] ?? '0';
                                 $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
-                                $showStudent = $lastCustid !== $custid;
-                                $lastCustid = $custid;
                                 $rowNo = ($tagihanRows->firstItem() ?? 0) + $loop->index;
                                 $tglTagih = '-';
                                 if (!empty($r['tgl_tagih'])) {
@@ -334,9 +331,9 @@
                                     <input type="checkbox" class="dt-row-sel" data-custid="{{ $custid }}" aria-label="Pilih baris">
                                 </td>
                                 <td class="dt-col-no">{{ $rowNo }}</td>
-                                <td class="dt-student">{{ $showStudent ? ($r['nis'] ?? '') : '' }}</td>
-                                <td class="dt-student">{{ $showStudent ? ($r['no_va'] ?? '') : '' }}</td>
-                                <td class="dt-student">{{ $showStudent ? ($r['nama'] ?? '') : '' }}</td>
+                                <td>{{ $r['nis'] ?? '-' }}</td>
+                                <td>{{ $r['no_va'] ?? '-' }}</td>
+                                <td>{{ $r['nama'] ?? '-' }}</td>
                                 <td>{{ $r['nama_tagihan'] ?? '-' }}</td>
                                 <td class="dt-num">{{ number_format((int) ($r['tagihan'] ?? 0), 0, ',', '.') }}</td>
                                 <td class="dt-center">{{ $furutan }}</td>
