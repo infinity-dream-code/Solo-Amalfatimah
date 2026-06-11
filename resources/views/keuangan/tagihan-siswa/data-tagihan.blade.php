@@ -15,20 +15,11 @@
         .dt-filter {
             padding: 0 16px 14px;
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 12px 16px;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
             border-bottom: 1px solid #eef2f7;
         }
-        @media (max-width: 1100px) { .dt-filter { grid-template-columns: 1fr 1fr; } }
-        @media (max-width: 720px) { .dt-filter { grid-template-columns: 1fr; } }
-        .dt-filter-col--actions { display: flex; flex-direction: column; gap: 8px; }
-        .dt-sel-readonly {
-            width: 100%; height: 34px; border: 1px solid #d1d5db; border-radius: 6px;
-            padding: 0 8px; font-size: 12px; background: #f9fafb; color: #374151;
-        }
-        .dt-sel-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-        .dt-sel-btns .dt-btn { justify-content: center; height: 34px; font-size: 12px; }
-        .dt-btn-naik, .dt-btn-turun { background: #f8fafc; }
+        @media (max-width: 960px) { .dt-filter { grid-template-columns: 1fr; } }
         .dt-fld label { display: block; font-size: 12px; font-weight: 700; color: #4b5563; margin-bottom: 6px; }
         .dt-fld input, .dt-fld select {
             width: 100%; height: 38px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 10px; font-size: 13px;
@@ -61,13 +52,11 @@
         .dt-select, .dt-input { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 10px; font-size: 12px; }
         .dt-table-wrap { overflow-x: auto; }
         .dt-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 12px; }
-        .dt-table th, .dt-table td { border: 1px solid #c4b5fd; padding: 7px 6px; text-align: left; vertical-align: middle; }
-        .dt-table th { background: #7c3aed; color: #fff; font-weight: 700; white-space: nowrap; }
-        .dt-table tbody tr { cursor: pointer; }
-        .dt-table tbody tr:nth-child(even) td { background: #f5f3ff; }
-        .dt-table tbody tr.dt-row-selected td { background: #ddd6fe !important; }
-        .dt-table tbody tr.dt-row-sub td.dt-student { color: transparent; user-select: none; }
-        .dt-sel-icon { width: 28px; text-align: center; color: #7c3aed; font-size: 14px; }
+        .dt-table th, .dt-table td { border-bottom: 1px solid #eef2f7; padding: 8px 6px; text-align: left; vertical-align: middle; }
+        .dt-table th { background: #fafbfd; color: #4b5563; font-weight: 700; white-space: nowrap; }
+        .dt-check { width: 36px; text-align: center; }
+        .dt-check input { width: 16px; height: 16px; cursor: pointer; vertical-align: middle; }
+        .dt-col-no { width: 42px; text-align: center; white-space: nowrap; }
         .dt-center { text-align: center; }
         .dt-num { text-align: right; }
         .dt-urut-actions { display: flex; flex-direction: column; gap: 4px; }
@@ -118,7 +107,7 @@
 
     <div class="page-heading">
         <h2>Data Tagihan Siswa</h2>
-        <p>Klik baris tagihan untuk memilih, lalu gunakan <strong>NAIK</strong> / <strong>TURUN</strong> / <strong>Hapus</strong>.</p>
+        <p>Filter tagihan, lihat NIS &amp; virtual account, ubah urutan naik/turun per baris.</p>
     </div>
 
     <div class="dt-wrap">
@@ -148,80 +137,65 @@
                 $dtPrintUrl = route('keu.tagihan.data_print') . ($dtPrintQs !== '' ? '?' . $dtPrintQs : '');
             @endphp
 
-            <form method="GET" action="{{ route('keu.tagihan.data') }}" id="dtFilterForm">
+            <form method="GET" action="{{ route('keu.tagihan.data') }}">
                 <div class="dt-filter">
-                    <div class="dt-filter-col">
-                        <div class="dt-fld">
-                            <label>Tahun Akademik</label>
-                            <select name="thn_akademik">
-                                <option value="">Semua</option>
-                                @foreach (($filterOptions['thn_akademik'] ?? []) as $th)
-                                    @php $val = (string) ($th['thn_aka'] ?? ''); @endphp
-                                    @if ($val !== '')
-                                        <option value="{{ $val }}" {{ (($filters['thn_akademik'] ?? '') === $val) ? 'selected' : '' }}>{{ $val }}</option>
-                                    @endif
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="dt-fld">
-                            <label>NIS</label>
-                            <input type="text" name="nis" value="{{ $filters['nis'] ?? '' }}" placeholder="nis" autocomplete="off">
-                        </div>
-                        <div class="dt-fld">
-                            <label>Nama</label>
-                            <input type="text" name="nama" value="{{ $filters['nama'] ?? '' }}" placeholder="nama" autocomplete="off">
-                        </div>
-                        <div class="dt-fld">
-                            <label>Nama Tagihan</label>
-                            <select name="nama_tagihan">
-                                <option value="">Semua</option>
-                                @foreach (($filterOptions['tagihan'] ?? []) as $tag)
-                                    <option value="{{ $tag }}" {{ (($filters['nama_tagihan'] ?? '') === $tag) ? 'selected' : '' }}>{{ $tag }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                    <div class="dt-fld">
+                        <label>Tanggal pembuatan (dari)</label>
+                        <input type="date" name="tgl_dari" value="{{ $filters['tgl_dari'] ?? '' }}">
                     </div>
-                    <div class="dt-filter-col">
-                        <div class="dt-fld">
-                            <label>Kelas</label>
-                            <select name="kelas_id">
-                                <option value="">Semua</option>
-                                @foreach (($filterOptions['kelas'] ?? []) as $k)
-                                    @php $id = (string) ($k['id'] ?? ''); $lbl = trim((string) (($k['unit'] ?? '') . ' ' . ($k['kelas'] ?? ''))); @endphp
-                                    @if ($id !== '')
-                                        <option value="{{ $id }}" {{ (($filters['kelas_id'] ?? '') === $id) ? 'selected' : '' }}>{{ $lbl }}</option>
-                                    @endif
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="dt-fld">
-                            <label>Tahun Angkatan</label>
-                            <select name="thn_angkatan">
-                                <option value="">Semua</option>
-                                @foreach (($filterOptions['thn_angkatan'] ?? []) as $ta)
-                                    <option value="{{ $ta }}" {{ (($filters['thn_angkatan'] ?? '') === $ta) ? 'selected' : '' }}>{{ $ta }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                    <div class="dt-fld">
+                        <label>Tanggal pembuatan (sampai)</label>
+                        <input type="date" name="tgl_sampai" value="{{ $filters['tgl_sampai'] ?? '' }}">
                     </div>
-                    <div class="dt-filter-col dt-filter-col--actions">
-                        <div class="dt-fld">
-                            <label>Nama Tagihan (pilihan)</label>
-                            <input type="text" id="dtSelNamaTagihan" class="dt-sel-readonly" readonly placeholder="—">
-                        </div>
-                        <div class="dt-fld">
-                            <label>Urutan Tagihan</label>
-                            <input type="text" id="dtSelUrutan" class="dt-sel-readonly" readonly placeholder="—">
-                        </div>
-                        <div class="dt-sel-btns">
-                            <button type="button" class="dt-btn dt-btn-naik" id="dtBtnNaik" disabled>NAIK</button>
-                            <button type="button" class="dt-btn dt-btn-turun" id="dtBtnTurun" disabled>TURUN</button>
-                            <button type="submit" class="dt-btn dt-btn-search">Cari</button>
-                            <button type="button" class="dt-btn dt-hapus" id="dtBtnHapusSel" disabled>Hapus</button>
-                        </div>
+                    <div class="dt-fld">
+                        <label>Angkatan siswa</label>
+                        <select name="thn_angkatan">
+                            <option value="">Semua</option>
+                            @foreach (($filterOptions['thn_angkatan'] ?? []) as $ta)
+                                <option value="{{ $ta }}" {{ (($filters['thn_angkatan'] ?? '') === $ta) ? 'selected' : '' }}>{{ $ta }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="dt-fld">
+                        <label>Tahun akademik</label>
+                        <select name="thn_akademik">
+                            <option value="">Semua</option>
+                            @foreach (($filterOptions['thn_akademik'] ?? []) as $th)
+                                @php $val = (string) ($th['thn_aka'] ?? ''); @endphp
+                                @if ($val !== '')
+                                    <option value="{{ $val }}" {{ (($filters['thn_akademik'] ?? '') === $val) ? 'selected' : '' }}>{{ $val }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="dt-fld">
+                        <label>Kelas</label>
+                        <select name="kelas_id">
+                            <option value="">Semua</option>
+                            @foreach (($filterOptions['kelas'] ?? []) as $k)
+                                @php $id = (string) ($k['id'] ?? ''); $lbl = trim((string) (($k['unit'] ?? '') . ' ' . ($k['kelas'] ?? ''))); @endphp
+                                @if ($id !== '')
+                                    <option value="{{ $id }}" {{ (($filters['kelas_id'] ?? '') === $id) ? 'selected' : '' }}>{{ $lbl }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="dt-fld">
+                        <label>Nama tagihan</label>
+                        <select name="nama_tagihan">
+                            <option value="">Semua</option>
+                            @foreach (($filterOptions['tagihan'] ?? []) as $tag)
+                                <option value="{{ $tag }}" {{ (($filters['nama_tagihan'] ?? '') === $tag) ? 'selected' : '' }}>{{ $tag }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="dt-fld" style="grid-column: 1 / -1;">
+                        <label>Siswa (NIS / nama)</label>
+                        <input type="text" name="siswa" value="{{ $filters['siswa'] ?? '' }}" placeholder="Masukkan NIS / nama">
                     </div>
                 </div>
                 <div class="dt-actions dt-actions--filter">
+                    <button type="submit" class="dt-btn dt-btn-search">Cari</button>
                     <a class="dt-btn" href="{{ route('keu.tagihan.data') }}">Reset</a>
                     <button type="button" class="dt-btn dt-btn-kartu" id="dtBtnKartu">Cetak Kartu Siswa</button>
                     <button type="button" class="dt-btn dt-btn-rekap" id="dtBtnRekap">Cetak Rekap</button>
@@ -293,7 +267,8 @@
                 <table class="dt-table" id="dtTable">
                     <thead>
                         <tr>
-                            <th class="dt-sel-icon"></th>
+                            <th class="dt-check"><input type="checkbox" id="dtSelectPage" aria-label="Pilih semua di halaman"></th>
+                            <th class="dt-col-no">No</th>
                             <th>NIS</th>
                             <th>NO VA</th>
                             <th>Nama</th>
@@ -302,6 +277,9 @@
                             <th class="dt-center">Urutan Bayar</th>
                             <th class="dt-center">Tgl Tagih</th>
                             <th>Tahun Tagihan</th>
+                            <th>Naik</th>
+                            <th>Turun</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -321,6 +299,7 @@
                                 $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
                                 $showStudent = $lastCustid !== $custid;
                                 $lastCustid = $custid;
+                                $rowNo = ($tagihanRows->firstItem() ?? 0) + $loop->index;
                                 $tglTagih = '-';
                                 if (!empty($r['tgl_tagih'])) {
                                     try {
@@ -330,15 +309,11 @@
                                     }
                                 }
                             @endphp
-                            <tr class="dt-bill-row{{ $showStudent ? '' : ' dt-row-sub' }}"
-                                data-custid="{{ $custid }}"
-                                data-billcd="{{ e($billcd) }}"
-                                data-aa="{{ e($aa) }}"
-                                data-furutan="{{ $furutan }}"
-                                data-max-furutan="{{ $maxFurutan }}"
-                                data-nama-tagihan="{{ e($r['nama_tagihan'] ?? '') }}"
-                                data-lunas="{{ $isLunas ? '1' : '0' }}">
-                                <td class="dt-sel-icon" aria-hidden="true">📄</td>
+                            <tr>
+                                <td class="dt-check">
+                                    <input type="checkbox" class="dt-row-sel" data-custid="{{ $custid }}" aria-label="Pilih baris">
+                                </td>
+                                <td class="dt-col-no">{{ $rowNo }}</td>
                                 <td class="dt-student">{{ $showStudent ? ($r['nis'] ?? '') : '' }}</td>
                                 <td class="dt-student">{{ $showStudent ? ($r['no_va'] ?? '') : '' }}</td>
                                 <td class="dt-student">{{ $showStudent ? ($r['nama'] ?? '') : '' }}</td>
@@ -347,10 +322,33 @@
                                 <td class="dt-center">{{ $furutan }}</td>
                                 <td class="dt-center">{{ $tglTagih }}</td>
                                 <td>{{ $r['tahun_aka'] ?? '-' }}</td>
+                                <td>
+                                    @if ($custid > 0 && $aa !== '')
+                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan >= $maxFurutan) disabled title="Sudah urutan terbesar" @endif>NAIK</button>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($custid > 0 && $aa !== '')
+                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan <= 1) disabled title="Sudah urutan 1" @endif>TURUN</button>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td>
+                                    @if ($custid > 0 && $billcd !== '' && !$isLunas)
+                                        <button type="button" class="dt-bill-del dt-hapus" data-custid="{{ $custid }}" data-billcd="{{ $billcd }}">Hapus</button>
+                                    @elseif ($isLunas)
+                                        <span class="dt-paid">Lunas</span>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data.</td>
+                                <td colspan="13" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -359,7 +357,7 @@
 
             <div class="dt-footer">
                 <div>
-                    Menampilkan {{ $tagihanRows->firstItem() ?? 0 }}–{{ $tagihanRows->lastItem() ?? 0 }} dari {{ $tagihanRows->total() ?? 0 }}
+                    Menampilkan {{ $tagihanRows->firstItem() ?? 0 }}–{{ $tagihanRows->lastItem() ?? 0 }}
                 </div>
                 <div style="display:flex;gap:6px;align-items:center;">
                     @if ($tagihanRows->onFirstPage())
@@ -385,45 +383,13 @@
             const urlUrutan = @json(route('keu.tagihan.data_urutan'));
             const urlHapus = @json(route('keu.tagihan.data_hapus'));
 
-            let selectedRow = null;
-            const selNamaTagihan = document.getElementById('dtSelNamaTagihan');
-            const selUrutan = document.getElementById('dtSelUrutan');
-            const btnNaik = document.getElementById('dtBtnNaik');
-            const btnTurun = document.getElementById('dtBtnTurun');
-            const btnHapusSel = document.getElementById('dtBtnHapusSel');
-
-            function updateSelButtons() {
-                if (!selectedRow) {
-                    if (selNamaTagihan) selNamaTagihan.value = '';
-                    if (selUrutan) selUrutan.value = '';
-                    if (btnNaik) btnNaik.disabled = true;
-                    if (btnTurun) btnTurun.disabled = true;
-                    if (btnHapusSel) btnHapusSel.disabled = true;
-                    return;
-                }
-                const furutan = parseInt(selectedRow.getAttribute('data-furutan') || '0', 10);
-                const maxF = parseInt(selectedRow.getAttribute('data-max-furutan') || String(furutan), 10);
-                const aa = selectedRow.getAttribute('data-aa') || '';
-                const custid = parseInt(selectedRow.getAttribute('data-custid') || '0', 10);
-                const isLunas = selectedRow.getAttribute('data-lunas') === '1';
-                if (selNamaTagihan) selNamaTagihan.value = selectedRow.getAttribute('data-nama-tagihan') || '';
-                if (selUrutan) selUrutan.value = String(furutan);
-                const canUrut = custid > 0 && aa !== '';
-                if (btnNaik) btnNaik.disabled = !canUrut || furutan >= maxF;
-                if (btnTurun) btnTurun.disabled = !canUrut || furutan <= 1;
-                if (btnHapusSel) btnHapusSel.disabled = !(custid > 0 && !isLunas);
-            }
-
-            document.querySelectorAll('.dt-bill-row').forEach(function (tr) {
-                tr.addEventListener('click', function () {
-                    document.querySelectorAll('.dt-bill-row.dt-row-selected').forEach(function (r) {
-                        r.classList.remove('dt-row-selected');
-                    });
-                    tr.classList.add('dt-row-selected');
-                    selectedRow = tr;
-                    updateSelButtons();
+            const selPage = document.getElementById('dtSelectPage');
+            if (selPage) {
+                selPage.addEventListener('change', function () {
+                    const on = selPage.checked;
+                    document.querySelectorAll('.dt-row-sel').forEach(function (c) { c.checked = on; });
                 });
-            });
+            }
 
             (function exportDropdown() {
                 const root = document.getElementById('dtExpRoot');
@@ -492,18 +458,23 @@
                 const inpThnAka = document.querySelector('select[name="thn_akademik"]');
                 const inpKelas = document.querySelector('select[name="kelas_id"]');
 
+                function selectedCustIds() {
+                    const ids = {};
+                    document.querySelectorAll('.dt-row-sel:checked').forEach(function (cb) {
+                        const n = parseInt(cb.getAttribute('data-custid') || '0', 10);
+                        if (n > 0) ids[n] = true;
+                    });
+                    return Object.keys(ids).map(function (k) { return parseInt(k, 10); });
+                }
+
                 if (btnKartu && formKartu && selectedRowsInput) {
                     btnKartu.addEventListener('click', function () {
-                        if (!selectedRow) {
-                            alert('Klik baris tagihan dulu untuk memilih siswa.');
+                        const ids = selectedCustIds();
+                        if (ids.length === 0) {
+                            alert('Pilih minimal 1 siswa dari centang kiri tabel.');
                             return;
                         }
-                        const cid = parseInt(selectedRow.getAttribute('data-custid') || '0', 10);
-                        if (cid <= 0) {
-                            alert('Siswa tidak valid.');
-                            return;
-                        }
-                        selectedRowsInput.value = JSON.stringify([cid]);
+                        selectedRowsInput.value = JSON.stringify(ids);
                         formKartu.submit();
                     });
                 }
@@ -535,54 +506,44 @@
                 }).then(function (r) { return r.json(); });
             }
 
-            function doUrutan(direction) {
-                if (!selectedRow) {
-                    alert('Pilih baris tagihan dulu.');
-                    return;
-                }
-                const custid = parseInt(selectedRow.getAttribute('data-custid') || '0', 10);
-                const billcd = selectedRow.getAttribute('data-billcd') || '';
-                const aa = selectedRow.getAttribute('data-aa') || '';
-                if (!custid || !aa) return;
-                if (btnNaik) btnNaik.disabled = true;
-                if (btnTurun) btnTurun.disabled = true;
-                postJson(urlUrutan, { custid: custid, billcd: billcd, aa: aa, direction: direction })
-                    .then(function (res) {
-                        if (res && res.ok) {
-                            if (res.data && res.data.changed === false) {
-                                alert(res.message || 'Urutan tidak berubah.');
-                                updateSelButtons();
+            document.querySelectorAll('.dt-bill-act').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    const custid = parseInt(btn.getAttribute('data-custid'), 10);
+                    const billcd = btn.getAttribute('data-billcd') || '';
+                    const aa = btn.getAttribute('data-aa') || '';
+                    const direction = btn.getAttribute('data-act') === 'up' ? 'up' : 'down';
+                    if (!custid || !aa) return;
+                    btn.disabled = true;
+                    postJson(urlUrutan, { custid: custid, billcd: billcd, aa: aa, direction: direction })
+                        .then(function (res) {
+                            if (res && res.ok) {
+                                if (res.data && res.data.changed === false) {
+                                    alert(res.message || 'Urutan tidak berubah.');
+                                    btn.disabled = false;
+                                    return;
+                                }
+                                window.location.reload();
                                 return;
                             }
-                            window.location.reload();
-                            return;
-                        }
-                        var msg = (res && (res.message || (res.errors && JSON.stringify(res.errors)))) || 'Gagal ubah urutan';
-                        alert(msg);
-                        updateSelButtons();
-                    })
-                    .catch(function () {
-                        alert('Koneksi gagal');
-                        updateSelButtons();
-                    });
-            }
+                            var msg = (res && (res.message || (res.errors && JSON.stringify(res.errors)))) || 'Gagal ubah urutan';
+                            alert(msg);
+                            btn.disabled = false;
+                        })
+                        .catch(function () {
+                            alert('Koneksi gagal');
+                            btn.disabled = false;
+                        });
+                });
+            });
 
-            if (btnNaik) {
-                btnNaik.addEventListener('click', function () { doUrutan('up'); });
-            }
-            if (btnTurun) {
-                btnTurun.addEventListener('click', function () { doUrutan('down'); });
-            }
-            if (btnHapusSel) {
-                btnHapusSel.addEventListener('click', function () {
-                    if (!selectedRow) {
-                        alert('Pilih baris tagihan dulu.');
-                        return;
-                    }
+            document.querySelectorAll('.dt-bill-del').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
                     if (!confirm('Hapus tagihan ini?')) return;
-                    const custid = parseInt(selectedRow.getAttribute('data-custid') || '0', 10);
-                    const billcd = selectedRow.getAttribute('data-billcd') || '';
-                    btnHapusSel.disabled = true;
+                    const custid = parseInt(btn.getAttribute('data-custid'), 10);
+                    const billcd = btn.getAttribute('data-billcd') || '';
+                    btn.disabled = true;
                     postJson(urlHapus, { custid: custid, billcd: billcd })
                         .then(function (res) {
                             if (res && res.ok) {
@@ -591,14 +552,14 @@
                             }
                             var msg = (res && res.message) || 'Gagal hapus';
                             alert(msg);
-                            updateSelButtons();
+                            btn.disabled = false;
                         })
                         .catch(function () {
                             alert('Koneksi gagal');
-                            updateSelButtons();
+                            btn.disabled = false;
                         });
                 });
-            }
+            });
         })();
     </script>
 @endsection
