@@ -77,12 +77,8 @@
                 .mp-tagihan-table .mp-col-nominal .bill-nominal-input {
                     width:100%; max-width:9rem; padding:8px 10px; border:1px solid var(--border); border-radius:8px;
                     font-variant-numeric: tabular-nums; text-align:right;
-                    position:relative; z-index:2; pointer-events:auto; cursor:text;
-                    background:#fff; color:var(--text);
-                    -webkit-user-select:text; user-select:text;
-                }
-                .mp-tagihan-table .mp-col-nominal .bill-nominal-input:focus {
-                    outline:2px solid rgba(16,185,129,0.35); outline-offset:1px; border-color:#10b981;
+                    background:#f9fafb; color:var(--text);
+                    cursor:default;
                 }
             </style>
 
@@ -204,7 +200,7 @@
                                     <td>{{ $billnm }}</td>
                                     <td class="mp-col-tagihan"><span class="mp-rp">Rp.</span><span class="mp-amt">{{ number_format($billam, 0, ',', '.') }}</span></td>
                                     <td class="mp-col-thn">{{ $tahunAka !== '' ? $tahunAka : '—' }}</td>
-                                    <td class="mp-col-nominal"><input class="bill-nominal-input" type="text" name="nominal_bayar[]" inputmode="decimal" autocomplete="off" value="{{ number_format($billam, 0, ',', '.') }}"></td>
+                                    <td class="mp-col-nominal"><input class="bill-nominal-input" type="text" readonly tabindex="-1" aria-readonly="true" value="{{ number_format($billam, 0, ',', '.') }}"></td>
                                 </tr>
                             @empty
                                 <tr>
@@ -387,8 +383,7 @@
                         const tds = tr.querySelectorAll('td');
                         const namaTagihan = tds[5]?.textContent?.trim() || '—';
                         const tagihanAmt = parseInt(cb.getAttribute('data-amount') || '0', 10);
-                        const nominalInput = tr.querySelector('.bill-nominal-input');
-                        const bayarAmt = nominalInput ? parseNominalInput(nominalInput.value) : tagihanAmt;
+                        const bayarAmt = tagihanAmt;
                         total += bayarAmt;
                         rowsHtml += '<tr>'
                             + '<td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;">' + (idx + 1) + '</td>'

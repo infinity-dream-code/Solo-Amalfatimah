@@ -312,15 +312,21 @@
                 });
             }
 
-            function dpCollectCheckedCustIds() {
-                var ids = [];
+            function dpCollectCheckedBills() {
+                var keys = [];
+                var seen = {};
                 document.querySelectorAll('.dp-row-cb:checked').forEach(function (cb) {
                     var id = parseInt(cb.getAttribute('data-custid') || '0', 10);
-                    if (id > 0) {
-                        ids.push(id);
+                    var billcd = String(cb.getAttribute('data-billcd') || '').trim();
+                    if (id > 0 && billcd !== '') {
+                        var key = id + '|' + billcd;
+                        if (!seen[key]) {
+                            seen[key] = true;
+                            keys.push(key);
+                        }
                     }
                 });
-                return ids.filter(function (v, i, a) { return a.indexOf(v) === i; });
+                return keys;
             }
 
             function dpAppendDynHidden(form, name, value, dataAttr) {
@@ -361,14 +367,14 @@
             var dpFormKartu = document.getElementById('dpFormKartu');
             if (dpBtnKartu && dpFormKartu) {
                 dpBtnKartu.addEventListener('click', function () {
-                    var ids = dpCollectCheckedCustIds();
-                    if (ids.length === 0) {
-                        alert('Pilih minimal satu siswa (centang baris di tabel).');
+                    var bills = dpCollectCheckedBills();
+                    if (bills.length === 0) {
+                        alert('Pilih minimal satu baris tagihan (centang di tabel).');
                         return;
                     }
                     dpFillExportForm(dpFormKartu, 'data-dp-kartu-dyn', null);
-                    ids.forEach(function (id) {
-                        dpAppendDynHidden(dpFormKartu, 'custids[]', id, 'data-dp-kartu-dyn');
+                    bills.forEach(function (key) {
+                        dpAppendDynHidden(dpFormKartu, 'selected_bills[]', key, 'data-dp-kartu-dyn');
                     });
                     dpFormKartu.submit();
                 });
@@ -381,16 +387,16 @@
                 if (!dpFormKuitansi) {
                     return;
                 }
-                var ids = dpCollectCheckedCustIds();
-                if (ids.length === 0) {
-                    alert('Pilih minimal satu siswa (centang baris di tabel).');
+                var bills = dpCollectCheckedBills();
+                if (bills.length === 0) {
+                    alert('Pilih minimal satu baris tagihan (centang di tabel).');
                     return;
                 }
                 dpFillExportForm(dpFormKuitansi, 'data-dp-kuitansi-dyn', [
                     ['dengan_2000', dengan2k ? '1' : '0']
                 ]);
-                ids.forEach(function (id) {
-                    dpAppendDynHidden(dpFormKuitansi, 'custids[]', id, 'data-dp-kuitansi-dyn');
+                bills.forEach(function (key) {
+                    dpAppendDynHidden(dpFormKuitansi, 'selected_bills[]', key, 'data-dp-kuitansi-dyn');
                 });
                 dpFormKuitansi.submit();
             }
@@ -436,7 +442,7 @@
                                 var no = (j.first_item || 0) + idx;
                                 var hay = esc((r.search_hay || '').replace(/"/g, ''));
                                 return '<tr class="dp-data-row" data-dp-hay="' + hay + '">' +
-                                    '<td class="dp-check"><input type="checkbox" class="dp-row-cb" data-custid="' + esc(String(r.custid || r.CUSTID || 0)) + '"></td>' +
+                                    '<td class="dp-check"><input type="checkbox" class="dp-row-cb" data-custid="' + esc(String(r.custid || r.CUSTID || 0)) + '" data-billcd="' + escAttr(r.billcd || r.BILLCD || '') + '"></td>' +
                                     '<td>' + esc(no) + '</td>' +
                                     '<td>' + esc(r.nis || '-') + '</td>' +
                                     '<td>' + esc(r.nama || '-') + '</td>' +

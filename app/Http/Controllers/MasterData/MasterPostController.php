@@ -14,7 +14,11 @@ class MasterPostController extends Controller
     public function index(Request $request, AmalFatimahApiService $api): View
     {
         $keyword = trim((string) $request->query('q', ''));
-        $rows = $api->getAkun($keyword !== '' ? $keyword : null);
+        $kode = trim((string) $request->query('kode', ''));
+        $rows = $api->getAkun(
+            $keyword !== '' ? $keyword : null,
+            $kode !== '' ? $kode : null
+        );
 
         $perPage = 10;
         $currentPage = max(1, (int) $request->query('page', 1));
@@ -37,6 +41,7 @@ class MasterPostController extends Controller
             'pageTitle' => 'Master Post',
             'postRows' => $postRows,
             'keyword' => $keyword,
+            'kode' => $kode,
         ]);
     }
 

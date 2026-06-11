@@ -1049,8 +1049,8 @@ XML);
             }
 
             $tahun = trim((string) ($row['bta'] ?? '-'));
-            $kode = trim((string) ($row['kode_post'] ?? '-'));
-            $nama = trim((string) ($row['nama_tagihan'] ?? '-'));
+            $kode = trim((string) ($row['kode_post'] ?? $row['kode'] ?? '-'));
+            $nama = trim((string) ($row['nama_post'] ?? $row['nama_tagihan'] ?? '-'));
             $val = (int) ($row['billam'] ?? 0);
             if ($val === 0) {
                 continue;
@@ -1282,8 +1282,8 @@ XML);
             $namaTagihan = trim((string) ($r['nama_tagihan'] ?? ''));
             $out[] = array_merge($r, [
                 'angkatan' => trim((string) ($r['angkatan'] ?? $r['desc04'] ?? '')),
-                'kode' => trim((string) ($r['kode'] ?? $billcd)),
-                'nama_post' => trim((string) ($r['nama_post'] ?? $namaTagihan)),
+                'kode' => trim((string) ($r['kode'] ?? $r['kode_post'] ?? '')),
+                'nama_post' => trim((string) ($r['nama_post'] ?? '')),
                 'billcd' => $billcd,
                 'custid' => (int) ($r['custid'] ?? 0),
                 'furutan' => (int) ($r['furutan'] ?? 0),
@@ -1710,7 +1710,7 @@ XML);
         $total = 0;
         $errorMsg = '';
         if ($hasSearchRequest) {
-            $res = $api->getDataTagihan($filters, $perPage, ($page - 1) * $perPage);
+            $res = $api->getDataTagihan($filters, $perPage, ($page - 1) * $perPage, false, [], false, true);
             if ($res['ok']) {
                 $raw = $res['data']['rows'] ?? [];
                 $rows = $this->normalizeRekapTagihanRows($raw);

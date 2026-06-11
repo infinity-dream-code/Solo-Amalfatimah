@@ -257,7 +257,10 @@ class AmalFatimahApiService
         return array_values($units);
     }
 
-    public function deleteKelas(int $id): bool
+    /**
+     * @return array{ok: bool, message: string}
+     */
+    public function deleteKelas(int $id): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -270,21 +273,26 @@ class AmalFatimahApiService
                 'id' => $id,
             ]);
 
-            if (!$response->successful()) {
-                Log::warning('[WS Amal Fatimah] deleteKelas HTTP failed', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-                return false;
+            $data = $response->json();
+            $status = (int) ($data['status'] ?? $response->status());
+
+            if ($response->successful() && $status === 200) {
+                return ['ok' => true, 'message' => (string) ($data['message'] ?? 'Kelas berhasil dihapus.')];
             }
 
-            $data = $response->json();
-            $status = (int) ($data['status'] ?? 0);
+            Log::warning('[WS Amal Fatimah] deleteKelas failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
 
-            return $status === 200;
+            return [
+                'ok' => false,
+                'message' => (string) ($data['message'] ?? 'Gagal menghapus data kelas.'),
+            ];
         } catch (\Throwable $e) {
             Log::error('[WS Amal Fatimah] deleteKelas: ' . $e->getMessage());
-            return false;
+
+            return ['ok' => false, 'message' => 'Terjadi kesalahan saat menghubungi layanan.'];
         }
     }
 
@@ -530,7 +538,7 @@ class AmalFatimahApiService
         }
     }
 
-    public function getAkun(?string $namaAkun = null): array
+    public function getAkun(?string $namaAkun = null, ?string $kodeAkun = null): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -540,6 +548,7 @@ class AmalFatimahApiService
             'method' => 'getAkun',
             'token' => $token,
             'NamaAkun' => $namaAkun,
+            'KodeAkun' => $kodeAkun,
         ], static fn ($value) => !is_null($value) && $value !== '');
 
         try {
@@ -1658,7 +1667,8 @@ class AmalFatimahApiService
         int $offset,
         bool $forExport = false,
         array $custids = [],
-        bool $rekapCetak = false
+        bool $rekapCetak = false,
+        bool $rekapList = false
     ): array {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -1684,6 +1694,9 @@ class AmalFatimahApiService
 
         if ($rekapCetak) {
             $body['rekap_cetak'] = 1;
+        }
+        if ($rekapList) {
+            $body['rekap_list'] = 1;
         }
         $custidNums = [];
         foreach ($custids as $v) {
@@ -2131,12 +2144,14 @@ class AmalFatimahApiService
     }
 
     /**
-     * Kartu siswa dari data cek pelunasan berdasarkan custid terpilih.
+     * Kartu siswa dari data cek pelunasan.
+     * Jika custids kosong, WS mengambil siswa unik dari filter (maks. 100).
      *
      * @param list<int> $custids
+     * @param array<string, string> $filters
      * @return array{ok: bool, message: string, data: array<string, mixed>}
      */
-    public function getCekPelunasanCards(array $custids): array
+    public function getCekPelunasanCards(array $custids, array $filters = []): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -2147,11 +2162,19 @@ class AmalFatimahApiService
             static fn ($v) => $v > 0
         )));
 
-        $body = [
+        $body = array_merge([
             'method' => 'getCekPelunasanCards',
             'token' => $token,
             'custids' => $cleanIds,
-        ];
+        ], array_filter([
+            'thn_akademik' => trim((string) ($filters['thn_akademik'] ?? '')),
+            'kelas_id' => trim((string) ($filters['kelas_id'] ?? '')),
+            'nis' => trim((string) ($filters['nis'] ?? '')),
+            'thn_angkatan' => trim((string) ($filters['thn_angkatan'] ?? '')),
+            'nama' => trim((string) ($filters['nama'] ?? '')),
+            'nama_tagihan' => trim((string) ($filters['nama_tagihan'] ?? '')),
+            'cari' => trim((string) ($filters['cari'] ?? '')),
+        ], static fn ($v) => $v !== ''));
 
         try {
             $response = Http::timeout(120)->connectTimeout(25)->post($url, $body);
@@ -2467,7 +2490,7 @@ class AmalFatimahApiService
      * @param array<string, string> $filters
      * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>, meta: array<string, mixed>}}
      */
-    public function getDataTransaksiSccttran(array $filters, int $limit, int $offset): array
+    public function getDataTransaksiSccttran(array $filters, int $limit, int $offset, bool $forExport = false): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -2488,9 +2511,12 @@ class AmalFatimahApiService
             'nama' => trim((string) ($filters['nama'] ?? '')),
             'cari' => trim((string) ($filters['cari'] ?? '')),
         ], static fn ($v) => $v !== ''));
+        if ($forExport) {
+            $body['for_export'] = 1;
+        }
 
         try {
-            $response = Http::timeout(180)->connectTimeout(25)->post($url, $body);
+            $response = Http::timeout($forExport ? 300 : 180)->connectTimeout(25)->post($url, $body);
             $json = $response->json();
             if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
                 return [
@@ -2518,6 +2544,48 @@ class AmalFatimahApiService
                 'data' => ['rows' => [], 'meta' => []],
             ];
         }
+    }
+
+    /**
+     * Semua baris transaksi untuk export (chunk, maks. 8000).
+     *
+     * @param array<string, string> $filters
+     * @return array{ok: bool, message: string, data: array{rows: list<array<string, mixed>>}}
+     */
+    public function getDataTransaksiSccttranExportAll(array $filters, int $maxRows = 8000): array
+    {
+        $chunk = 1000;
+        $all = [];
+        $offset = 0;
+        $maxLoops = (int) ceil($maxRows / $chunk) + 2;
+
+        for ($loop = 0; $loop < $maxLoops && count($all) < $maxRows; $loop++) {
+            $res = $this->getDataTransaksiSccttran($filters, $chunk, $offset, true);
+            if (!$res['ok']) {
+                return $res;
+            }
+            $rows = $res['data']['rows'] ?? [];
+            if (!is_array($rows) || $rows === []) {
+                break;
+            }
+            foreach ($rows as $r) {
+                $all[] = $r;
+                if (count($all) >= $maxRows) {
+                    break 2;
+                }
+            }
+            $hasMore = (bool) ($res['data']['meta']['has_more'] ?? false);
+            if (!$hasMore || count($rows) < $chunk) {
+                break;
+            }
+            $offset += count($rows);
+        }
+
+        return [
+            'ok' => true,
+            'message' => '',
+            'data' => ['rows' => $all],
+        ];
     }
 
     /**
@@ -2571,6 +2639,70 @@ class AmalFatimahApiService
                 'ok' => false,
                 'message' => 'Terjadi kesalahan saat menghubungi layanan',
                 'data' => ['rows' => [], 'meta' => []],
+            ];
+        }
+    }
+
+    /**
+     * Matrix rekap penerimaan: post (u_akun) + nama tagihan × kelas/kelompok.
+     *
+     * @param array<string, string> $filters
+     * @return array{ok: bool, message: string, data: array{rows: array<int, mixed>, truncated?: bool}}
+     */
+    public function getRekapPenerimaanMatrixExport(array $filters): array
+    {
+        $url = config('services.ws_amal_fatimah.url');
+        $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
+        $token = $this->jwt->encode(['sub' => 'getRekapPenerimaanMatrix', 'rnd' => uniqid()], $jwtKey);
+
+        $body = array_merge([
+            'method' => 'getRekapPenerimaanMatrix',
+            'token' => $token,
+        ], array_filter([
+            'tgl_dari' => trim((string) ($filters['tgl_dari'] ?? '')),
+            'tgl_sampai' => trim((string) ($filters['tgl_sampai'] ?? '')),
+            'thn_angkatan' => trim((string) ($filters['thn_angkatan'] ?? '')),
+            'thn_akademik' => trim((string) ($filters['thn_akademik'] ?? '')),
+            'kelas_id' => trim((string) ($filters['kelas_id'] ?? '')),
+            'nama_tagihan' => trim((string) ($filters['nama_tagihan'] ?? '')),
+            'nis' => trim((string) ($filters['nis'] ?? '')),
+            'nama' => trim((string) ($filters['nama'] ?? '')),
+            'cari' => trim((string) ($filters['cari'] ?? '')),
+            'fidbank' => trim((string) ($filters['fidbank'] ?? '')),
+            'sekolah' => trim((string) ($filters['sekolah'] ?? '')),
+            'periode_mulai' => trim((string) ($filters['periode_mulai'] ?? '')),
+            'periode_akhir' => trim((string) ($filters['periode_akhir'] ?? '')),
+        ], static fn ($v) => $v !== ''));
+
+        try {
+            $response = Http::timeout(180)
+                ->connectTimeout(25)
+                ->post($url, $body);
+            $json = $response->json();
+            if (!$response->successful() || (int) ($json['status'] ?? 0) !== 200) {
+                return [
+                    'ok' => false,
+                    'message' => (string) ($json['message'] ?? 'Gagal memuat matrix rekap penerimaan'),
+                    'data' => ['rows' => []],
+                ];
+            }
+            $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+
+            return [
+                'ok' => true,
+                'message' => '',
+                'data' => [
+                    'rows' => is_array($data['rows'] ?? null) ? array_values($data['rows']) : [],
+                    'truncated' => (bool) ($data['truncated'] ?? false),
+                ],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('[WS Amal Fatimah] getRekapPenerimaanMatrixExport: ' . $e->getMessage());
+
+            return [
+                'ok' => false,
+                'message' => 'Terjadi kesalahan saat menghubungi layanan',
+                'data' => ['rows' => []],
             ];
         }
     }
@@ -2643,13 +2775,14 @@ class AmalFatimahApiService
     }
 
     /**
-     * Kartu siswa (Data Penerimaan): custids + filter sama seperti getDataPenerimaan.
+     * Kartu siswa (Data Penerimaan): filter + custids; jika $selectedBills diisi hanya baris terpilih.
      *
      * @param array<string, string> $filters
      * @param list<int> $custids
+     * @param list<array{custid: int, billcd: string}> $selectedBills
      * @return array{ok: bool, message: string, data: array{cards: list<array<string, mixed>>, error?: string}}
      */
-    public function getKartuSiswaPenerimaan(array $filters, array $custids): array
+    public function getKartuSiswaPenerimaan(array $filters, array $custids, array $selectedBills = []): array
     {
         $url = config('services.ws_amal_fatimah.url');
         $jwtKey = config('services.ws_amal_fatimah.jwt_key') ?? '';
@@ -2663,6 +2796,19 @@ class AmalFatimahApiService
             }
         }
         $cleanIds = array_values(array_unique($cleanIds));
+
+        $billKeys = [];
+        foreach ($selectedBills as $sb) {
+            if (!is_array($sb)) {
+                continue;
+            }
+            $cid = (int) ($sb['custid'] ?? 0);
+            $bcd = trim((string) ($sb['billcd'] ?? ''));
+            if ($cid > 0 && $bcd !== '') {
+                $billKeys[] = $cid . '|' . $bcd;
+            }
+        }
+        $billKeys = array_values(array_unique($billKeys));
 
         $body = array_merge([
             'method' => 'getKartuSiswaPenerimaan',
@@ -2683,6 +2829,9 @@ class AmalFatimahApiService
             'periode_mulai' => trim((string) ($filters['periode_mulai'] ?? '')),
             'periode_akhir' => trim((string) ($filters['periode_akhir'] ?? '')),
         ], static fn ($v) => $v !== ''));
+        if ($billKeys !== []) {
+            $body['selected_bills'] = $billKeys;
+        }
 
         try {
             $response = Http::timeout(120)->connectTimeout(25)->post($url, $body);

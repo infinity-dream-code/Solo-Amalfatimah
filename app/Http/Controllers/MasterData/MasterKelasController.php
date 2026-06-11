@@ -126,10 +126,10 @@ class MasterKelasController extends Controller
             return redirect()->route('master.kelas')->with('status', 'ID kelas tidak valid.');
         }
 
-        $deleted = $api->deleteKelas($kelasId);
+        $result = $api->deleteKelas($kelasId);
 
-        if (!$deleted) {
-            return redirect()->route('master.kelas')->with('status', "Gagal menghapus data Master Kelas #{$id}.");
+        if (!($result['ok'] ?? false)) {
+            return redirect()->route('master.kelas')->with('error', $result['message'] ?? "Gagal menghapus data Master Kelas #{$id}.");
         }
 
         return redirect()->route('master.kelas')->with('status', "Data Master Kelas #{$id} berhasil dihapus.");

@@ -347,8 +347,25 @@ class SaldoController extends Controller
         ]);
     }
 
-    public function transaksi(Request $request, AmalFatimahApiService $api): View
+    public function transaksi(Request $request, AmalFatimahApiService $api): View|StreamedResponse|\Illuminate\Http\Response|JsonResponse
     {
+        $export = $request->query('export');
+        if ($export === 'csv') {
+            return $this->transaksiExportCsv($request, $api);
+        }
+        if ($export === 'pdf') {
+            return $this->transaksiExportPdf($request, $api);
+        }
+        if ($export === 'xls') {
+            return $this->transaksiExportXls($request, $api);
+        }
+        if ($export === 'print') {
+            return $this->transaksiExportPrint($request, $api);
+        }
+        if ($export === 'json') {
+            return $this->transaksiExportJson($request, $api);
+        }
+
         [$filters, $perPage, $page, $queryForUrls] = $this->dtListBundle($request);
 
         $shell = $api->loadRekapPenerimaanShell();
@@ -365,6 +382,178 @@ class SaldoController extends Controller
             'queryForUrls' => $queryForUrls,
             'transaksiRowsUrl' => route('keu.saldo.transaksi.rows', array_merge($queryForUrls, ['page' => $page])),
         ]);
+    }
+
+    /**
+     * @return array{0: bool, 1: list<array<string, mixed>>, 2: string}
+     */
+    private function transaksiExportDataset(Request $request, AmalFatimahApiService $api): array
+    {
+        $filters = $this->dtFiltersOnly($request);
+        $res = $api->getDataTransaksiSccttranExportAll($filters, 8000);
+        if (!$res['ok']) {
+            return [false, [], (string) ($res['message'] ?? 'Gagal memuat data.')];
+        }
+        $rows = $res['data']['rows'] ?? [];
+
+        return [true, is_array($rows) ? $rows : [], ''];
+    }
+
+    private function transaksiExportCsv(Request $request, AmalFatimahApiService $api): StreamedResponse
+    {
+        [$ok, $rows, $msg] = $this->transaksiExportDataset($request, $api);
+        if (!$ok) {
+            abort(422, $msg);
+        }
+
+        $fn = 'data-transaksi-' . date('Ymd-His') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            if ($out === false) {
+                return;
+            }
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, ['No', 'NIS', 'NO VA', 'NAMA', 'METODE', 'TANGGAL TRANSAKSI', 'DEBET', 'KREDIT'], ';');
+            $no = 1;
+            foreach ($rows as $r) {
+                if (!is_array($r)) {
+                    continue;
+                }
+                fputcsv($out, [
+                    $no++,
+                    $r['nis'] ?? '',
+                    $r['no_va'] ?? '',
+                    $r['nama'] ?? '',
+                    $r['metode'] ?? '',
+                    $this->formatTrxDateExport($r['trxdate'] ?? null),
+                    (string) ((int) ($r['debet'] ?? 0)),
+                    (string) ((int) ($r['kredit'] ?? 0)),
+                ], ';');
+            }
+            fclose($out);
+        }, $fn, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    private function transaksiExportJson(Request $request, AmalFatimahApiService $api): JsonResponse
+    {
+        [$ok, $rows, $msg] = $this->transaksiExportDataset($request, $api);
+        if (!$ok) {
+            return response()->json(['ok' => false, 'message' => $msg], 422);
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $out[] = [
+                'nis' => (string) ($r['nis'] ?? ''),
+                'no_va' => (string) ($r['no_va'] ?? ''),
+                'nama' => (string) ($r['nama'] ?? ''),
+                'metode' => (string) ($r['metode'] ?? ''),
+                'trxdate' => $this->formatTrxDateExport($r['trxdate'] ?? null),
+                'debet' => (int) ($r['debet'] ?? 0),
+                'kredit' => (int) ($r['kredit'] ?? 0),
+            ];
+        }
+
+        return response()->json(['ok' => true, 'rows' => $out]);
+    }
+
+    private function transaksiExportXls(Request $request, AmalFatimahApiService $api): \Illuminate\Http\Response
+    {
+        [$ok, $rows, $msg] = $this->transaksiExportDataset($request, $api);
+        if (!$ok) {
+            abort(422, $msg);
+        }
+
+        $esc = static fn (string $s): string => htmlspecialchars($s, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+
+        $buf = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $buf .= '<?mso-application progid="Excel.Sheet"?>' . "\n";
+        $buf .= '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
+        $buf .= '<Styles><Style ss:ID="hdr"><Font ss:Bold="1"/></Style><Style ss:ID="n"><NumberFormat ss:Format="#,##0"/></Style></Styles>' . "\n";
+        $buf .= '<Worksheet ss:Name="Data Transaksi"><Table>' . "\n";
+        $buf .= '<Column ss:Width="40"/><Column ss:Width="90"/><Column ss:Width="110"/><Column ss:Width="180"/><Column ss:Width="100"/><Column ss:Width="140"/><Column ss:Width="90"/><Column ss:Width="90"/>' . "\n";
+        $buf .= '<Row>';
+        foreach (['NO', 'NIS', 'NO VA', 'NAMA', 'METODE', 'TANGGAL TRANSAKSI', 'DEBET', 'KREDIT'] as $h) {
+            $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $esc($h) . '</Data></Cell>';
+        }
+        $buf .= '</Row>' . "\n";
+
+        $no = 1;
+        foreach ($rows as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $debet = (int) ($r['debet'] ?? 0);
+            $kredit = (int) ($r['kredit'] ?? 0);
+            $buf .= '<Row>';
+            $buf .= '<Cell><Data ss:Type="Number">' . $no++ . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['nis'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['no_va'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['nama'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['metode'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc($this->formatTrxDateExport($r['trxdate'] ?? null)) . '</Data></Cell>';
+            $buf .= '<Cell ss:StyleID="n"><Data ss:Type="Number">' . $debet . '</Data></Cell>';
+            $buf .= '<Cell ss:StyleID="n"><Data ss:Type="Number">' . $kredit . '</Data></Cell>';
+            $buf .= '</Row>' . "\n";
+        }
+
+        $buf .= '</Table></Worksheet></Workbook>';
+
+        $fn = 'data-transaksi-' . date('Ymd-His') . '.xls';
+
+        return response($buf, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $fn . '"',
+        ]);
+    }
+
+    private function transaksiExportPdf(Request $request, AmalFatimahApiService $api): \Illuminate\Http\Response
+    {
+        [$ok, $rows, $msg] = $this->transaksiExportDataset($request, $api);
+        if (!$ok) {
+            abort(422, $msg);
+        }
+
+        $pdf = Pdf::loadView('keuangan.saldo.data-transaksi-export-pdf', [
+            'rows' => $rows,
+            'exportedAt' => now(),
+        ]);
+        $pdf->setPaper('a4', 'landscape');
+
+        return $pdf->download('data-transaksi-' . date('Ymd-His') . '.pdf');
+    }
+
+    private function transaksiExportPrint(Request $request, AmalFatimahApiService $api): View
+    {
+        [$ok, $rows, $msg] = $this->transaksiExportDataset($request, $api);
+        if (!$ok) {
+            abort(422, $msg);
+        }
+
+        return view('keuangan.saldo.data-transaksi-print', [
+            'rows' => $rows,
+            'exportedAt' => now(),
+        ]);
+    }
+
+    private function formatTrxDateExport(mixed $dtStr): string
+    {
+        if ($dtStr === null || trim((string) $dtStr) === '') {
+            return '-';
+        }
+        try {
+            $d = new \DateTimeImmutable(str_replace(' ', 'T', trim((string) $dtStr)));
+
+            return $d->format('d/m/Y H:i');
+        } catch (\Throwable) {
+            return (string) $dtStr;
+        }
     }
 
     public function transaksiRows(Request $request, AmalFatimahApiService $api): JsonResponse

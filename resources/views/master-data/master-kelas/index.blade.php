@@ -194,6 +194,11 @@
             font-size: 13px;
             font-weight: 600;
         }
+
+        .mk-alert-error {
+            background: #fef2f2;
+            color: #b91c1c;
+        }
     </style>
 
     <div class="page-heading">
@@ -209,6 +214,9 @@
 
         @if (session('status'))
             <div class="mk-alert">{{ session('status') }}</div>
+        @endif
+        @if (session('error'))
+            <div class="mk-alert mk-alert-error">{{ session('error') }}</div>
         @endif
 
         <div class="mk-toolbar">

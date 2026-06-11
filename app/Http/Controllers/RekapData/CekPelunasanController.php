@@ -82,11 +82,18 @@ class CekPelunasanController extends Controller
             array_map(static fn ($v) => (int) $v, $custids),
             static fn ($n) => $n > 0
         )));
-        if ($custids === []) {
-            return redirect()->back()->with('export_error', 'Pilih minimal satu siswa untuk Cetak Kartu Siswa.');
-        }
 
-        $res = $api->getCekPelunasanCards($custids);
+        $filters = [
+            'thn_akademik' => trim((string) $request->input('thn_akademik', '')),
+            'kelas_id' => trim((string) $request->input('kelas_id', '')),
+            'nis' => trim((string) $request->input('nis', '')),
+            'thn_angkatan' => trim((string) $request->input('thn_angkatan', '')),
+            'nama' => trim((string) $request->input('nama', '')),
+            'nama_tagihan' => trim((string) $request->input('nama_tagihan', '')),
+            'cari' => trim((string) $request->input('cari', '')),
+        ];
+
+        $res = $api->getCekPelunasanCards($custids, $filters);
         if (!$res['ok']) {
             return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data kartu siswa.');
         }

@@ -1,6 +1,10 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $dtExportQ = request()->query();
+        unset($dtExportQ['export'], $dtExportQ['page']);
+    @endphp
     <style>
         .dt-wrap { margin-top: 16px; }
         .dt-card {
@@ -35,6 +39,18 @@
             display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
         }
         .dt-btn-search { background: #2563eb; border-color: #2563eb; color: #fff; }
+        .dt-btn-export { background: #e0f2fe; border-color: #7dd3fc; color: #0369a1; }
+        .dt-export-dd { position: relative; display: inline-block; }
+        .dt-export-menu {
+            display: none; position: absolute; right: 0; top: calc(100% + 4px); min-width: 160px;
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 8px 20px rgba(15,23,42,.12); z-index: 20; overflow: hidden;
+        }
+        .dt-export-dd.open .dt-export-menu { display: block; }
+        .dt-export-menu a, .dt-export-menu button {
+            display: block; width: 100%; text-align: left; padding: 10px 14px; border: 0; background: #fff;
+            font-size: 13px; font-weight: 600; color: #374151; cursor: pointer; text-decoration: none;
+        }
+        .dt-export-menu a:hover, .dt-export-menu button:hover { background: #f8fafc; }
         .dt-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #eef2f7; }
         .dt-select, .dt-input-search { height: 34px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 10px; font-size: 12px; }
         .dt-table-wrap { overflow-x: auto; }
@@ -118,6 +134,16 @@
                 </div>
                 <p class="dt-hint">Sumber: <strong>sccttran</strong>.</p>
                 <div class="dt-actions">
+                    <div class="dt-export-dd" id="dtExportDd">
+                        <button type="button" class="dt-btn dt-btn-export" id="dtBtnExport" aria-expanded="false">Export ▾</button>
+                        <div class="dt-export-menu" role="menu" id="dtExportMenuInner">
+                            <button type="button" role="menuitem" id="dtExportCopy">Salin (Copy)</button>
+                            <a href="{{ route('keu.saldo.transaksi', array_merge($dtExportQ, ['export' => 'xls'])) }}" role="menuitem">Excel</a>
+                            <a href="{{ route('keu.saldo.transaksi', array_merge($dtExportQ, ['export' => 'pdf'])) }}" role="menuitem">Pdf</a>
+                            <a href="{{ route('keu.saldo.transaksi', array_merge($dtExportQ, ['export' => 'print'])) }}" role="menuitem" target="_blank" rel="noopener noreferrer">Print</a>
+                            <a href="{{ route('keu.saldo.transaksi', array_merge($dtExportQ, ['export' => 'csv'])) }}" role="menuitem">CSV (UTF-8)</a>
+                        </div>
+                    </div>
                     <a class="dt-btn" href="{{ route('keu.saldo.transaksi') }}">Reset</a>
                     <button type="submit" class="dt-btn dt-btn-search">Cari</button>
                 </div>
@@ -301,6 +327,59 @@
 
             if (loadUrl && tbody) {
                 fetchRows(loadUrl);
+            }
+
+            var exportDd = document.getElementById('dtExportDd');
+            var exportBtn = document.getElementById('dtBtnExport');
+            if (exportBtn && exportDd) {
+                exportBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    exportDd.classList.toggle('open');
+                    exportBtn.setAttribute('aria-expanded', exportDd.classList.contains('open') ? 'true' : 'false');
+                });
+                var exportMenuInner = document.getElementById('dtExportMenuInner');
+                if (exportMenuInner) {
+                    exportMenuInner.addEventListener('click', function (e) { e.stopPropagation(); });
+                }
+                document.addEventListener('click', function () { exportDd.classList.remove('open'); });
+            }
+
+            var dtExportCopy = document.getElementById('dtExportCopy');
+            if (dtExportCopy && exportDd) {
+                dtExportCopy.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    exportDd.classList.remove('open');
+                    var u = new URL(window.location.href);
+                    u.searchParams.set('export', 'json');
+                    fetch(u.toString(), {
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'same-origin'
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (j) {
+                            if (!j || !j.ok || !j.rows) {
+                                alert((j && j.message) ? j.message : 'Gagal menyalin data.');
+                                return;
+                            }
+                            var lines = ['NIS\tNO VA\tNAMA\tMETODE\tTANGGAL TRANSAKSI\tDEBET\tKREDIT'];
+                            j.rows.forEach(function (r) {
+                                lines.push([
+                                    r.nis || '', r.no_va || '', r.nama || '', r.metode || '',
+                                    r.trxdate || '', String(r.debet || 0), String(r.kredit || 0)
+                                ].join('\t'));
+                            });
+                            var text = lines.join('\n');
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(text).then(function () {
+                                    alert('Data disalin ke clipboard (' + j.rows.length + ' baris).');
+                                }).catch(function () { prompt('Salin manual:', text); });
+                            } else {
+                                prompt('Salin manual:', text);
+                            }
+                        })
+                        .catch(function () { alert('Gagal menghubungi server.'); });
+                });
             }
         })();
     </script>

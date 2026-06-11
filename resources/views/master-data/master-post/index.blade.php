@@ -134,8 +134,11 @@
 
         <div class="mp-toolbar">
             <form method="GET" action="{{ route('master.post') }}" class="mp-search">
-                <span>Cari:</span>
-                <input type="text" name="q" value="{{ $keyword ?? '' }}" placeholder="kata kunci pencarian">
+                <span>Cari nama:</span>
+                <input type="text" name="q" value="{{ $keyword ?? '' }}" placeholder="nama post">
+                <span>Kode:</span>
+                <input type="text" name="kode" value="{{ $kode ?? '' }}" placeholder="kode post" maxlength="10">
+                <button type="submit" style="height:34px;padding:0 12px;border:1px solid #d1d5db;border-radius:7px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;">Cari</button>
             </form>
         </div>
 

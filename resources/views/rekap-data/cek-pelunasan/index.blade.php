@@ -44,8 +44,6 @@
         .cp-table th { background: #fafbfd; color: #4b5563; font-weight: 700; white-space: nowrap; }
         .cp-num { text-align: right; white-space: nowrap; }
         .cp-center { text-align: center; }
-        .cp-check { width: 36px; text-align: center; }
-        .cp-check input { width: 16px; height: 16px; cursor: pointer; vertical-align: middle; }
         .cp-pill {
             border-radius: 999px;
             padding: 2px 8px;
@@ -162,7 +160,6 @@
                 <table class="cp-table">
                     <thead>
                         <tr>
-                            <th class="cp-check"><input type="checkbox" id="cpSelAll" aria-label="Pilih semua di halaman ini"></th>
                             <th class="cp-center">No</th>
                             <th>Tahun Pelajaran</th>
                             <th>NIS</th>
@@ -175,7 +172,7 @@
                     </thead>
                     <tbody id="cpTbody">
                         <tr>
-                            <td colspan="9" style="text-align:center;color:#6b7280;padding:20px;">Memuat data...</td>
+                            <td colspan="8" style="text-align:center;color:#6b7280;padding:20px;">Memuat data...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -194,6 +191,11 @@
 
     <form id="cpFormKartu" method="POST" action="{{ route('rekap.cek_pelunasan.kartu_siswa') }}" target="_blank" style="display:none;" aria-hidden="true">
         @csrf
+        @foreach ($filters as $fk => $fv)
+            @if ($fv !== '' && $fv !== null && $fv !== false)
+                <input type="hidden" name="{{ $fk }}" value="{{ $fv }}">
+            @endif
+        @endforeach
     </form>
 
     <script>
@@ -205,7 +207,6 @@
             var footerNav = document.getElementById('cpFooterNav');
             var quickSearch = document.getElementById('cpSearchInput');
             var searchTimer = null;
-            var cpTable = document.querySelector('.cp-table');
 
             function esc(s) {
                 var d = document.createElement('div');
@@ -222,42 +223,29 @@
                 return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
             }
 
-            function collectCheckedCustIds() {
-                var ids = [];
-                document.querySelectorAll('.cp-row-cb:checked').forEach(function (cb) {
-                    var id = parseInt(cb.getAttribute('data-custid') || '0', 10);
-                    if (id > 0) ids.push(id);
-                });
-                return Array.from(new Set(ids));
-            }
-
-            if (cpTable) {
-                cpTable.addEventListener('change', function (e) {
-                    var t = e.target;
-                    if (t && t.id === 'cpSelAll') {
-                        var on = t.checked;
-                        document.querySelectorAll('.cp-row-cb').forEach(function (cb) { cb.checked = on; });
-                    }
-                });
-            }
-
             var btnKartu = document.getElementById('cpBtnKartu');
             var formKartu = document.getElementById('cpFormKartu');
+            var filterForm = document.getElementById('formCpFilter');
             if (btnKartu && formKartu) {
                 btnKartu.addEventListener('click', function () {
-                    var ids = collectCheckedCustIds();
-                    if (ids.length === 0) {
-                        alert('Pilih siswa dulu (centang baris) sebelum cetak kartu.');
-                        return;
+                    formKartu.querySelectorAll('input[type="hidden"]:not([name="_token"])').forEach(function (el) { el.remove(); });
+                    if (filterForm) {
+                        var fd = new FormData(filterForm);
+                        fd.forEach(function (val, key) {
+                            var inp = document.createElement('input');
+                            inp.type = 'hidden';
+                            inp.name = key;
+                            inp.value = String(val || '');
+                            formKartu.appendChild(inp);
+                        });
                     }
-                    formKartu.querySelectorAll('input[name="custids[]"]').forEach(function (el) { el.remove(); });
-                    ids.forEach(function (id) {
-                        var inp = document.createElement('input');
-                        inp.type = 'hidden';
-                        inp.name = 'custids[]';
-                        inp.value = String(id);
-                        formKartu.appendChild(inp);
-                    });
+                    if (quickSearch && String(quickSearch.value || '').trim() !== '') {
+                        var cariInp = document.createElement('input');
+                        cariInp.type = 'hidden';
+                        cariInp.name = 'cari';
+                        cariInp.value = String(quickSearch.value).trim();
+                        formKartu.appendChild(cariInp);
+                    }
                     formKartu.submit();
                 });
             }
@@ -290,20 +278,19 @@
                             errEl.style.display = 'block';
                             errEl.textContent = j.message || 'Gagal memuat data.';
                         }
-                        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#b91c1c;padding:20px;">' +
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:20px;">' +
                             esc(j.message || 'Gagal memuat data.') + '</td></tr>';
                         return;
                     }
 
                     var rows = j.rows || [];
                     if (rows.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data untuk filter ini.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data untuk filter ini.</td></tr>';
                     } else {
                         var start = Number(j.first_item || 1);
                         tbody.innerHTML = rows.map(function (r, idx) {
                             var lunas = Number(r.lunas || 0) === 1;
                             return '<tr>' +
-                                '<td class="cp-check"><input type="checkbox" class="cp-row-cb" data-custid="' + escAttr(String(r.custid || 0)) + '"></td>' +
                                 '<td class="cp-center">' + esc(String(start + idx)) + '</td>' +
                                 '<td>' + esc(r.tahun_pelajaran || '-') + '</td>' +
                                 '<td>' + esc(r.nis || '-') + '</td>' +
@@ -331,7 +318,7 @@
                         errEl.style.display = 'block';
                         errEl.textContent = 'Gagal menghubungi server.';
                     }
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#b91c1c;padding:20px;">Gagal menghubungi server.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#b91c1c;padding:20px;">Gagal menghubungi server.</td></tr>';
                 });
         })();
     </script>

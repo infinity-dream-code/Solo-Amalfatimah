@@ -68,7 +68,6 @@
             </div>
 
             <a href="{{ route('keu.hapus_tagihan') }}" class="{{ request()->routeIs(['keu.hapus_tagihan', 'keu.hapus_tagihan.rows', 'keu.hapus_tagihan.submit']) ? 'active' : '' }}">Hapus Tagihan</a>
-            <a href="{{ route('keu.biaya_admin') }}" class="{{ request()->routeIs('keu.biaya_admin') ? 'active' : '' }}">Data Biaya Admin</a>
         </div>
 
         <button type="button" class="sidebar-item has-children {{ request()->routeIs('manual_input.*') ? 'open active' : '' }}" id="manualInputToggle" onclick="toggleManualInput()">

@@ -143,18 +143,15 @@ class PenerimaanSiswaController extends Controller
      */
     public function printKartuSiswa(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {
-        $custids = $request->input('custids', []);
-        if (!is_array($custids)) {
-            $custids = [];
+        $selectedBills = $this->selectedBillsFromRequest($request);
+        if ($selectedBills === []) {
+            return redirect()->back()->with('export_error', 'Pilih minimal satu baris tagihan (centang di tabel).');
         }
-        $custids = array_values(array_unique(array_filter(array_map(static fn ($v) => (int) $v, $custids), static fn ($n) => $n > 0)));
-        if ($custids === []) {
-            return redirect()->back()->with('export_error', 'Pilih minimal satu siswa (centang baris di tabel).');
-        }
+        $custids = array_values(array_unique(array_column($selectedBills, 'custid')));
 
         $filters = $this->penerimaanFiltersFromPost($request);
 
-        $res = $api->getKartuSiswaPenerimaan($filters, $custids);
+        $res = $api->getKartuSiswaPenerimaan($filters, $custids, $selectedBills);
         if (!$res['ok']) {
             return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data.');
         }
@@ -179,18 +176,15 @@ class PenerimaanSiswaController extends Controller
      */
     public function printKuitansi(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {
-        $custids = $request->input('custids', []);
-        if (!is_array($custids)) {
-            $custids = [];
+        $selectedBills = $this->selectedBillsFromRequest($request);
+        if ($selectedBills === []) {
+            return redirect()->back()->with('export_error', 'Pilih minimal satu baris tagihan (centang di tabel).');
         }
-        $custids = array_values(array_unique(array_filter(array_map(static fn ($v) => (int) $v, $custids), static fn ($n) => $n > 0)));
-        if ($custids === []) {
-            return redirect()->back()->with('export_error', 'Pilih minimal satu siswa (centang baris di tabel).');
-        }
+        $custids = array_values(array_unique(array_column($selectedBills, 'custid')));
 
         $filters = $this->penerimaanFiltersFromPost($request);
 
-        $res = $api->getKartuSiswaPenerimaan($filters, $custids);
+        $res = $api->getKartuSiswaPenerimaan($filters, $custids, $selectedBills);
         if (!$res['ok']) {
             return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data.');
         }
@@ -241,19 +235,22 @@ class PenerimaanSiswaController extends Controller
             return $export;
         }
 
-        $columns = $export['columns'];
-        $students = $export['students'];
-        $colTotals = $export['colTotals'];
-        $grandTotal = $export['grandTotal'];
+        $matrix = is_array($export['matrix'] ?? null) ? $export['matrix'] : [];
+        $rows = is_array($matrix['rows'] ?? null) ? $matrix['rows'] : [];
+        $kelasOrder = is_array($matrix['kelasOrder'] ?? null) ? $matrix['kelasOrder'] : [];
+        $kelompokOrder = is_array($matrix['kelompokOrder'] ?? null) ? $matrix['kelompokOrder'] : [];
         $filterSummary = $export['filterSummary'];
         $maybeTruncated = $export['maybeTruncated'];
 
         $esc = static fn (string $s): string => htmlspecialchars($s, ENT_XML1 | ENT_COMPAT, 'UTF-8');
-        $rp = static fn (int $n): string => 'Rp ' . number_format($n, 0, ',', '.');
+        $num = static fn (int $n): string => number_format($n, 0, ',', '.');
 
-        $fixedHeaders = ['No.', 'NIS', 'Nama'];
-        $allHeaders = array_merge($fixedHeaders, $columns, ['TOTAL']);
-        $colCount = count($allHeaders);
+        $fixedCount = 4;
+        $dynamicCount = 0;
+        foreach ($kelasOrder as $kelas) {
+            $dynamicCount += count($kelompokOrder) + 1;
+        }
+        $colCount = $fixedCount + $dynamicCount + 1;
         $lastIdx = max(0, $colCount - 1);
 
         $buf = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
@@ -267,58 +264,79 @@ class PenerimaanSiswaController extends Controller
             . '<Style ss:ID="tot"><Font ss:Bold="1"/><Alignment ss:Horizontal="Right"/></Style>'
             . '</Styles>' . "\n";
         $buf .= '<Worksheet ss:Name="REKAP PENERIMAAN"><Table>' . "\n";
-        for ($i = 0; $i < $colCount; $i++) {
-            $w = 90;
-            if ($i === 0) {
-                $w = 45;
-            } elseif ($i === 1) {
-                $w = 95;
-            } elseif ($i === 2) {
-                $w = 140;
-            }
-            $buf .= '<Column ss:Width="' . $w . '"/>';
-        }
-        $buf .= "\n";
 
-        $buf .= '<Row><Cell ss:StyleID="title" ss:MergeAcross="' . $lastIdx . '"><Data ss:Type="String">REKAP PENERIMAAN</Data></Cell></Row>' . "\n";
+        $buf .= '<Row><Cell ss:StyleID="title" ss:MergeAcross="' . $lastIdx . '"><Data ss:Type="String">REKAP PEMBAYARAN SISWA</Data></Cell></Row>' . "\n";
         $buf .= '<Row><Cell ss:StyleID="metaKey"><Data ss:Type="String">Unit_Kelas</Data></Cell><Cell ss:MergeAcross="' . max(0, $lastIdx - 1) . '"><Data ss:Type="String">' . $esc((string) ($filterSummary['unit_kelas'] ?? '-')) . '</Data></Cell></Row>' . "\n";
         $buf .= '<Row><Cell ss:StyleID="metaKey"><Data ss:Type="String">Tahun Akademik</Data></Cell><Cell ss:MergeAcross="' . max(0, $lastIdx - 1) . '"><Data ss:Type="String">' . $esc((string) ($filterSummary['thn_akademik'] ?? '-')) . '</Data></Cell></Row>' . "\n";
         $buf .= '<Row><Cell ss:StyleID="metaKey"><Data ss:Type="String">Dari</Data></Cell><Cell ss:MergeAcross="' . max(0, $lastIdx - 1) . '"><Data ss:Type="String">' . $esc((string) ($filterSummary['dari'] ?? '-')) . '</Data></Cell></Row>' . "\n";
         $buf .= '<Row><Cell ss:StyleID="metaKey"><Data ss:Type="String">Hingga</Data></Cell><Cell ss:MergeAcross="' . max(0, $lastIdx - 1) . '"><Data ss:Type="String">' . $esc((string) ($filterSummary['hingga'] ?? '-')) . '</Data></Cell></Row>' . "\n";
         if ($maybeTruncated) {
-            $buf .= '<Row><Cell ss:MergeAcross="' . $lastIdx . '"><Data ss:Type="String">Catatan: data dibatasi maksimal 8000 baris sumber.</Data></Cell></Row>' . "\n";
+            $buf .= '<Row><Cell ss:MergeAcross="' . $lastIdx . '"><Data ss:Type="String">Catatan: data dibatasi maksimal 50.000 baris agregasi.</Data></Cell></Row>' . "\n";
         }
         $buf .= '<Row/>' . "\n";
 
         $buf .= '<Row>';
-        foreach ($allHeaders as $h) {
-            $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $esc((string) $h) . '</Data></Cell>';
+        $fixedHeaders = ['Thn Akademik', 'Kode', 'Nama Post', 'Nama Tagihan'];
+        foreach ($fixedHeaders as $h) {
+            $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $esc($h) . '</Data></Cell>';
         }
+        foreach ($kelasOrder as $kelas) {
+            $span = count($kelompokOrder) + 1;
+            $buf .= '<Cell ss:StyleID="hdr" ss:MergeAcross="' . max(0, $span - 1) . '"><Data ss:Type="String">' . $esc((string) $kelas) . '</Data></Cell>';
+        }
+        $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">Total</Data></Cell>';
         $buf .= '</Row>' . "\n";
 
-        foreach ($students as $idx => $st) {
-            if (!is_array($st)) {
+        $buf .= '<Row>';
+        $buf .= '<Cell ss:MergeAcross="3"><Data ss:Type="String"></Data></Cell>';
+        foreach ($kelasOrder as $kelas) {
+            foreach ($kelompokOrder as $k) {
+                $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">' . $esc((string) $k) . '</Data></Cell>';
+            }
+            $buf .= '<Cell ss:StyleID="hdr"><Data ss:Type="String">Sum</Data></Cell>';
+        }
+        $buf .= '<Cell><Data ss:Type="String"></Data></Cell>';
+        $buf .= '</Row>' . "\n";
+
+        $colTotals = array_fill(0, $colCount, 0);
+        $prevTahun = null;
+        foreach ($rows as $r) {
+            if (!is_array($r)) {
                 continue;
             }
+            $tahun = (string) ($r['tahun'] ?? '-');
+            $showTahun = $tahun !== $prevTahun ? $tahun : '';
+            $prevTahun = $tahun;
             $buf .= '<Row>';
-            $buf .= '<Cell><Data ss:Type="Number">' . ($idx + 1) . '</Data></Cell>';
-            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($st['nis'] ?? '')) . '</Data></Cell>';
-            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($st['nama'] ?? '')) . '</Data></Cell>';
-            foreach ($columns as $col) {
-                $v = (int) (($st['cells'][$col] ?? 0));
-                $buf .= '<Cell ss:StyleID="num"><Data ss:Type="String">' . $esc($rp($v)) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc($showTahun) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['kode'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['nama_post'] ?? '')) . '</Data></Cell>';
+            $buf .= '<Cell><Data ss:Type="String">' . $esc((string) ($r['nama_tagihan'] ?? '')) . '</Data></Cell>';
+            $colIdx = $fixedCount;
+            foreach ($kelasOrder as $kelas) {
+                $sub = 0;
+                foreach ($kelompokOrder as $k) {
+                    $v = (int) (($r['byClass'][$kelas][$k] ?? 0));
+                    $sub += $v;
+                    $colTotals[$colIdx] += $v;
+                    $buf .= '<Cell ss:StyleID="num"><Data ss:Type="Number">' . $v . '</Data></Cell>';
+                    $colIdx++;
+                }
+                $colTotals[$colIdx] += $sub;
+                $buf .= '<Cell ss:StyleID="num"><Data ss:Type="Number">' . $sub . '</Data></Cell>';
+                $colIdx++;
             }
-            $buf .= '<Cell ss:StyleID="tot"><Data ss:Type="String">' . $esc($rp((int) ($st['row_total'] ?? 0))) . '</Data></Cell>';
+            $total = (int) ($r['total'] ?? 0);
+            $colTotals[$colIdx] += $total;
+            $buf .= '<Cell ss:StyleID="num"><Data ss:Type="Number">' . $total . '</Data></Cell>';
             $buf .= '</Row>' . "\n";
         }
 
         $buf .= '<Row>';
-        $buf .= '<Cell ss:MergeAcross="2" ss:StyleID="tot"><Data ss:Type="String">TOTAL</Data></Cell>';
-        foreach ($columns as $col) {
-            $tv = (int) ($colTotals[$col] ?? 0);
-            $buf .= '<Cell ss:StyleID="tot"><Data ss:Type="String">' . $esc($rp($tv)) . '</Data></Cell>';
+        $buf .= '<Cell ss:MergeAcross="3" ss:StyleID="tot"><Data ss:Type="String">Total</Data></Cell>';
+        for ($i = $fixedCount; $i < $colCount; $i++) {
+            $buf .= '<Cell ss:StyleID="tot"><Data ss:Type="Number">' . (int) ($colTotals[$i] ?? 0) . '</Data></Cell>';
         }
-        $buf .= '<Cell ss:StyleID="tot"><Data ss:Type="String">' . $esc($rp($grandTotal)) . '</Data></Cell>';
         $buf .= '</Row>' . "\n";
 
         $buf .= '</Table></Worksheet></Workbook>';
@@ -333,10 +351,7 @@ class PenerimaanSiswaController extends Controller
 
     /**
      * @return array{
-     *     columns: list<string>,
-     *     students: list<array<string, mixed>>,
-     *     colTotals: array<string, int>,
-     *     grandTotal: int,
+     *     matrix: array{kelasOrder: list<string>, kelompokOrder: list<string>, rows: list<array<string, mixed>>},
      *     filterSummary: array<string, string>,
      *     maybeTruncated: bool
      * }|RedirectResponse
@@ -345,7 +360,7 @@ class PenerimaanSiswaController extends Controller
     {
         $filters = $this->penerimaanFiltersFromPost($request);
 
-        $res = $api->getDataPenerimaanPdfExport($filters);
+        $res = $api->getRekapPenerimaanMatrixExport($filters);
         if (!$res['ok']) {
             return redirect()->back()->with('export_error', $res['message'] ?? 'Gagal mengambil data rekap.');
         }
@@ -360,17 +375,14 @@ class PenerimaanSiswaController extends Controller
             $norm[] = is_array($row) ? array_change_key_case($row, CASE_LOWER) : [];
         }
 
-        $matrix = $this->rekapPenerimaanMatrixFromRows($norm);
+        $matrix = $this->rekapPenerimaanDetailMatrixFromRows($norm);
         $filterSummary = $this->rekapPenerimaanPdfFilterSummary($filters);
         $this->fillRekapSummaryFromRows($filterSummary, $norm);
 
         return [
-            'columns' => is_array($matrix['columns'] ?? null) ? $matrix['columns'] : [],
-            'students' => is_array($matrix['students'] ?? null) ? $matrix['students'] : [],
-            'colTotals' => is_array($matrix['col_totals'] ?? null) ? $matrix['col_totals'] : [],
-            'grandTotal' => (int) ($matrix['grand_total'] ?? 0),
+            'matrix' => $matrix,
             'filterSummary' => $filterSummary,
-            'maybeTruncated' => count($norm) >= 8000,
+            'maybeTruncated' => (bool) ($res['data']['truncated'] ?? false),
         ];
     }
 
@@ -387,7 +399,7 @@ class PenerimaanSiswaController extends Controller
         // Fallback tahun akademik dari data transaksi jika filter tidak diisi.
         $akaSet = [];
         foreach ($rows as $r) {
-            $aka = trim((string) ($r['tahun_aka'] ?? ''));
+            $aka = trim((string) ($r['tahun_aka'] ?? $r['bta'] ?? ''));
             if ($aka !== '') {
                 $akaSet[$aka] = true;
             }
@@ -437,6 +449,39 @@ class PenerimaanSiswaController extends Controller
     /**
      * @return array<string, string>
      */
+    /**
+     * @return list<array{custid: int, billcd: string}>
+     */
+    private function selectedBillsFromRequest(Request $request): array
+    {
+        $raw = $request->input('selected_bills', []);
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        $seen = [];
+        foreach ($raw as $v) {
+            $v = trim((string) $v);
+            if ($v === '' || !preg_match('/^(\d+)\|(.+)$/', $v, $m)) {
+                continue;
+            }
+            $custid = (int) $m[1];
+            $billcd = trim((string) $m[2]);
+            if ($custid <= 0 || $billcd === '') {
+                continue;
+            }
+            $key = $custid . '|' . $billcd;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = ['custid' => $custid, 'billcd' => $billcd];
+        }
+
+        return $out;
+    }
+
     private function penerimaanFiltersFromPost(Request $request): array
     {
         $sekolah = trim((string) $request->input('sekolah', ''));
@@ -551,118 +596,86 @@ class PenerimaanSiswaController extends Controller
     }
 
     /**
-     * Urutan kolom: BULAN JULI … BULAN JUNI (siklus tahun ajaran), lalu tagihan lain alfabetis.
+     * Matrix rekap penerimaan: Thn × Kode Post × Nama Tagihan × kelas/kelompok.
      *
-     * @return array{0: int, 1: int, 2: string}
-     */
-    private static function rekapPenerimaanColumnSortKey(string $name): array
-    {
-        $raw = trim($name);
-        $n = mb_strtoupper($raw, 'UTF-8');
-        if (preg_match('/^BULAN[\s\x{00A0}]+(.+)$/u', $n, $m)) {
-            $mn = trim($m[1]);
-            $order = [
-                'JULI' => 0,
-                'AGUSTUS' => 1,
-                'SEPTEMBER' => 2,
-                'OKTOBER' => 3,
-                'NOVEMBER' => 4,
-                'DESEMBER' => 5,
-                'JANUARI' => 6,
-                'FEBRUARI' => 7,
-                'MARET' => 8,
-                'APRIL' => 9,
-                'MEI' => 10,
-                'JUNI' => 11,
-            ];
-            if (isset($order[$mn])) {
-                return [0, $order[$mn], $raw];
-            }
-
-            return [0, 50, $raw];
-        }
-
-        return [1, 0, $raw];
-    }
-
-    /**
      * @param list<array<string, mixed>> $norm
-     * @return array{columns: list<string>, students: list<array<string, mixed>>, col_totals: array<string, int>, grand_total: int}
+     * @return array{kelasOrder: list<string>, kelompokOrder: list<string>, rows: list<array<string, mixed>>}
      */
-    private function rekapPenerimaanMatrixFromRows(array $norm): array
+    private function rekapPenerimaanDetailMatrixFromRows(array $norm): array
     {
-        $colSet = [];
-        foreach ($norm as $r) {
-            $k = trim((string) ($r['nama_tagihan'] ?? ''));
-            if ($k === '') {
-                $k = '-';
+        $kelasOrder = [];
+        $kelasSet = [];
+        $kelompokOrder = [];
+        $kelompokSet = [];
+        $rowMap = [];
+
+        foreach ($norm as $row) {
+            $kelasLabel = trim((string) ($row['kelas_label'] ?? $row['kelas'] ?? ''));
+            if ($kelasLabel === '') {
+                $kelasLabel = '-';
             }
-            $colSet[$k] = true;
-        }
-        $columns = array_keys($colSet);
-        usort($columns, function (string $a, string $b): int {
-            $ka = self::rekapPenerimaanColumnSortKey($a);
-            $kb = self::rekapPenerimaanColumnSortKey($b);
-            if ($ka[0] !== $kb[0]) {
-                return $ka[0] <=> $kb[0];
+            $kelompok = trim((string) ($row['kelompok'] ?? ''));
+            if ($kelompok === '') {
+                $kelompok = 'Reguler';
             }
-            if ($ka[1] !== $kb[1]) {
-                return $ka[1] <=> $kb[1];
+            if (!isset($kelasSet[$kelasLabel])) {
+                $kelasSet[$kelasLabel] = true;
+                $kelasOrder[] = $kelasLabel;
+            }
+            if (!isset($kelompokSet[$kelompok])) {
+                $kelompokSet[$kelompok] = true;
+                $kelompokOrder[] = $kelompok;
             }
 
-            return strnatcasecmp($a, $b);
-        });
+            $tahun = trim((string) ($row['bta'] ?? $row['tahun_aka'] ?? '-'));
+            $kode = trim((string) ($row['kode_post'] ?? '-'));
+            $namaPost = trim((string) ($row['nama_post'] ?? '-'));
+            $namaTagihan = trim((string) ($row['nama_tagihan'] ?? '-'));
+            $val = (int) ($row['billam'] ?? $row['tagihan'] ?? 0);
+            if ($val === 0) {
+                continue;
+            }
 
-        $studentsMap = [];
-        foreach ($norm as $r) {
-            $custid = (int) ($r['custid'] ?? 0);
-            if ($custid > 0) {
-                $sid = 'c:' . $custid;
-            } else {
-                $sid = 'h:' . md5(mb_strtolower(trim((string) (($r['nis'] ?? '') . '|' . ($r['nama'] ?? ''))), 'UTF-8'));
-            }
-            $col = trim((string) ($r['nama_tagihan'] ?? ''));
-            if ($col === '') {
-                $col = '-';
-            }
-            $amt = (int) ($r['tagihan'] ?? 0);
-            if (!isset($studentsMap[$sid])) {
-                $studentsMap[$sid] = [
-                    'custid' => $custid,
-                    'nis' => (string) ($r['nis'] ?? ''),
-                    'nama' => (string) ($r['nama'] ?? ''),
-                    'unit' => (string) ($r['unit'] ?? ''),
-                    'kelas' => (string) ($r['kelas'] ?? ''),
-                    'cells' => [],
+            $mapKey = $tahun . '||' . $kode . '||' . $namaPost . '||' . $namaTagihan;
+            if (!isset($rowMap[$mapKey])) {
+                $rowMap[$mapKey] = [
+                    'tahun' => $tahun,
+                    'kode' => $kode,
+                    'nama_post' => $namaPost,
+                    'nama_tagihan' => $namaTagihan,
+                    'byClass' => [],
+                    'total' => 0,
                 ];
             }
-            $studentsMap[$sid]['cells'][$col] = ($studentsMap[$sid]['cells'][$col] ?? 0) + $amt;
-        }
-
-        $students = array_values($studentsMap);
-        usort($students, static fn (array $a, array $b): int => strnatcasecmp($a['nis'] ?? '', $b['nis'] ?? ''));
-
-        $colTotals = [];
-        foreach ($columns as $c) {
-            $colTotals[$c] = 0;
-        }
-        foreach ($students as $i => $st) {
-            $rowSum = 0;
-            foreach ($columns as $c) {
-                $v = (int) ($st['cells'][$c] ?? 0);
-                $rowSum += $v;
-                $colTotals[$c] += $v;
+            if (!isset($rowMap[$mapKey]['byClass'][$kelasLabel])) {
+                $rowMap[$mapKey]['byClass'][$kelasLabel] = [];
             }
-            $students[$i]['row_total'] = $rowSum;
+            if (!isset($rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok])) {
+                $rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok] = 0;
+            }
+            $rowMap[$mapKey]['byClass'][$kelasLabel][$kelompok] += $val;
+            $rowMap[$mapKey]['total'] += $val;
         }
 
-        $grandTotal = array_sum($colTotals);
+        $rows = array_values($rowMap);
+        usort($rows, static function (array $a, array $b): int {
+            if ($a['tahun'] !== $b['tahun']) {
+                return strcmp((string) $a['tahun'], (string) $b['tahun']);
+            }
+            if ($a['kode'] !== $b['kode']) {
+                return strcmp((string) $a['kode'], (string) $b['kode']);
+            }
+            if ($a['nama_post'] !== $b['nama_post']) {
+                return strcmp((string) $a['nama_post'], (string) $b['nama_post']);
+            }
+
+            return strcmp((string) $a['nama_tagihan'], (string) $b['nama_tagihan']);
+        });
 
         return [
-            'columns' => $columns,
-            'students' => $students,
-            'col_totals' => $colTotals,
-            'grand_total' => $grandTotal,
+            'kelasOrder' => $kelasOrder,
+            'kelompokOrder' => $kelompokOrder,
+            'rows' => $rows,
         ];
     }
 

@@ -105,7 +105,8 @@
             }
             $waliT = trim((string) ($c['wali'] ?? $c['genus'] ?? $c['ayah'] ?? ''));
             $baseTotal = (int) ($c['total'] ?? 0);
-            $grandTotal = $baseTotal + ($dengan2000 ? 2000 : 0);
+            $adminFee = $dengan2000 ? (2000 * count($items)) : 0;
+            $grandTotal = $baseTotal + $adminFee;
         @endphp
         <div class="sheet">
             <div class="head-top">
@@ -193,11 +194,11 @@
                             <td style="font-size:7px;width:20%;">{{ $tglLong }}</td>
                         </tr>
                     @endforeach
-                    @if ($dengan2000)
+                    @if ($dengan2000 && $adminFee > 0)
                         <tr class="summary-row">
                             <td colspan="3" class="lbl-sum" width="52%">Biaya Layanan</td>
-                            <td class="num sum-num" width="14%">{{ kuitansi_format_rp(2000) }}</td>
-                            <td class="num sum-num" width="14%">{{ kuitansi_format_rp(2000) }}</td>
+                            <td class="num sum-num" width="14%">{{ kuitansi_format_rp($adminFee) }}</td>
+                            <td class="num sum-num" width="14%">{{ kuitansi_format_rp($adminFee) }}</td>
                             <td class="ctr" width="20%">—</td>
                         </tr>
                     @endif
