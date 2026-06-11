@@ -1688,6 +1688,8 @@ class AmalFatimahApiService
             'thn_akademik' => trim((string) ($filters['thn_akademik'] ?? '')),
             'kelas_id' => trim((string) ($filters['kelas_id'] ?? '')),
             'nama_tagihan' => trim((string) ($filters['nama_tagihan'] ?? '')),
+            'nis' => trim((string) ($filters['nis'] ?? '')),
+            'nama' => trim((string) ($filters['nama'] ?? '')),
             'siswa' => trim((string) ($filters['siswa'] ?? '')),
             'sort_urutan' => trim((string) ($filters['sort_urutan'] ?? '')),
         ], static fn ($v) => $v !== ''));

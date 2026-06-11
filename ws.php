@@ -3602,6 +3602,8 @@ function getDataTagihan(array $req): array
     $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
     $kelasId = trim((string) ($req['kelas_id'] ?? ''));
     $namaTagihan = trim((string) ($req['nama_tagihan'] ?? ''));
+    $nisFilter = trim((string) ($req['nis'] ?? ''));
+    $namaFilter = trim((string) ($req['nama'] ?? ''));
     $siswa = trim((string) ($req['siswa'] ?? ''));
     $sortUrutan = strtolower(trim((string) ($req['sort_urutan'] ?? 'asc')));
     if (!in_array($sortUrutan, ['asc', 'desc'], true)) {
@@ -3664,7 +3666,15 @@ function getDataTagihan(array $req): array
         $params[':kelas_id'] = $kelasId;
     }
 
-    if ($siswa !== '') {
+    if ($nisFilter !== '') {
+        $where[] = 'TRIM(c.NOCUST) LIKE :filt_nis';
+        $params[':filt_nis'] = '%' . $nisFilter . '%';
+    }
+    if ($namaFilter !== '') {
+        $where[] = 'TRIM(c.NMCUST) LIKE :filt_nama';
+        $params[':filt_nama'] = '%' . $namaFilter . '%';
+    }
+    if ($siswa !== '' && $nisFilter === '' && $namaFilter === '') {
         $sLike = '%' . $siswa . '%';
         $where[] = '(
             TRIM(c.NOCUST) LIKE :siswa_nis
@@ -3775,6 +3785,7 @@ function getDataTagihan(array $req): array
             TRIM(b.BILLNM) AS nama_tagihan,
             COALESCE(b.BILLAM, 0) AS tagihan,
             TRIM(b.BTA) AS tahun_aka,
+            b.FTGLTagihan AS tgl_tagih,
             COALESCE(b.furutan, 0) AS furutan,
             (
                 SELECT MAX(COALESCE(b2.furutan, 0))

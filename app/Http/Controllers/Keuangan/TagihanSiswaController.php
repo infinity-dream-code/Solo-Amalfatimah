@@ -715,6 +715,8 @@ XML);
             'thn_akademik' => trim((string) $request->query('thn_akademik', '')),
             'kelas_id' => trim((string) $request->query('kelas_id', '')),
             'nama_tagihan' => trim((string) $request->query('nama_tagihan', '')),
+            'nis' => trim((string) $request->query('nis', '')),
+            'nama' => trim((string) $request->query('nama', '')),
             'siswa' => trim((string) $request->query('siswa', '')),
             'sort_urutan' => in_array(strtolower(trim((string) $request->query('sort_urutan', 'asc'))), ['asc', 'desc'], true)
                 ? strtolower(trim((string) $request->query('sort_urutan', 'asc')))
@@ -1138,6 +1140,8 @@ XML);
             'thn_akademik' => trim((string) $request->input('thn_akademik', '')),
             'kelas_id' => trim((string) $request->input('kelas_id', '')),
             'nama_tagihan' => trim((string) $request->input('nama_tagihan', '')),
+            'nis' => trim((string) $request->input('nis', '')),
+            'nama' => trim((string) $request->input('nama', '')),
             'siswa' => trim((string) $request->input('siswa', '')),
             'sort_urutan' => in_array(strtolower(trim((string) $request->input('sort_urutan', 'asc'))), ['asc', 'desc'], true)
                 ? strtolower(trim((string) $request->input('sort_urutan', 'asc')))
