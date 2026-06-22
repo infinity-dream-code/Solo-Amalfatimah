@@ -56,6 +56,22 @@
         .dt-table th { background: #fafbfd; color: #4b5563; font-weight: 700; white-space: nowrap; }
         .dt-check { width: 36px; text-align: center; }
         .dt-check input { width: 16px; height: 16px; cursor: pointer; vertical-align: middle; }
+        .dt-expand-col { width: 34px; text-align: center; padding-left: 4px; padding-right: 4px; }
+        .dt-expand-btn {
+            width: 24px; height: 24px; border-radius: 6px; border: 1px solid #cbd5e1;
+            background: #f8fafc; color: #334155; font-weight: 800; font-size: 14px; line-height: 1;
+            cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+        }
+        .dt-expand-btn:hover { background: #e2e8f0; border-color: #94a3b8; }
+        .dt-expand-btn.is-open { background: #eef2ff; border-color: #818cf8; color: #4338ca; }
+        .dt-detail-row td { background: #f8fafc; padding: 0 8px 10px 42px; border-bottom: 1px solid #e2e8f0; }
+        .dt-detail-inner { padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .dt-detail-title { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+        .dt-detail-table { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 12px; }
+        .dt-detail-table th, .dt-detail-table td { border-bottom: 1px solid #f1f5f9; padding: 6px 8px; text-align: left; }
+        .dt-detail-table th { color: #64748b; font-weight: 700; background: #fafbfd; }
+        .dt-detail-empty { color: #94a3b8; font-size: 12px; padding: 4px 0; }
+        .dt-detail-loading { color: #64748b; font-size: 12px; padding: 4px 0; }
         .dt-col-no { width: 42px; text-align: center; white-space: nowrap; }
         .dt-center { text-align: center; }
         .dt-num { text-align: right; }
@@ -124,7 +140,7 @@
     <div class="dt-wrap">
         <div class="dt-card">
             <div class="dt-title">Data Tagihan</div>
-            <div class="dt-sub">Data dimuat per halaman (pagination). Filter opsional — kosongkan lalu <strong>Cari</strong> untuk semua tagihan aktif.</div>
+            <div class="dt-sub">Menampilkan tagihan <strong>belum lunas</strong> saja. Yang sudah dibayar ada di menu Data Penerimaan.</div>
 
             @if (($errorMsg ?? '') !== '')
                 <div class="dt-alert dt-err">{{ $errorMsg }}</div>
@@ -283,6 +299,7 @@
                 <table class="dt-table" id="dtTable">
                     <thead>
                         <tr>
+                            <th class="dt-expand-col" aria-label="Detail"></th>
                             <th class="dt-check"><input type="checkbox" id="dtSelectPage" aria-label="Pilih semua di halaman"></th>
                             <th class="dt-col-no">No</th>
                             <th>NIS</th>
@@ -326,7 +343,14 @@
                                     }
                                 }
                             @endphp
-                            <tr>
+                            <tr data-dt-row="{{ $custid }}|{{ e($billcd) }}">
+                                <td class="dt-expand-col">
+                                    @if ($custid > 0 && $billcd !== '')
+                                        <button type="button" class="dt-expand-btn" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" aria-expanded="false" title="Tampilkan detail">+</button>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
                                 <td class="dt-check">
                                     <input type="checkbox" class="dt-row-sel" data-custid="{{ $custid }}" aria-label="Pilih baris">
                                 </td>
@@ -341,14 +365,14 @@
                                 <td>{{ $r['tahun_aka'] ?? '-' }}</td>
                                 <td>
                                     @if ($custid > 0 && $aa !== '')
-                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan >= $maxFurutan) disabled title="Sudah urutan terbesar" @endif>NAIK</button>
+                                        <button type="button" class="dt-bill-act" data-act="up" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan <= 1) disabled title="Sudah urutan 1" @endif>NAIK</button>
                                     @else
                                         —
                                     @endif
                                 </td>
                                 <td>
                                     @if ($custid > 0 && $aa !== '')
-                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan <= 1) disabled title="Sudah urutan 1" @endif>TURUN</button>
+                                        <button type="button" class="dt-bill-act" data-act="down" data-custid="{{ $custid }}" data-billcd="{{ e($billcd) }}" data-aa="{{ e($aa) }}" @if($furutan >= $maxFurutan) disabled title="Sudah urutan terbesar" @endif>TURUN</button>
                                     @else
                                         —
                                     @endif
@@ -363,9 +387,16 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if ($custid > 0 && $billcd !== '')
+                                <tr class="dt-detail-row" data-dt-detail-for="{{ $custid }}|{{ e($billcd) }}" hidden>
+                                    <td colspan="14">
+                                        <div class="dt-detail-inner" data-dt-detail-panel></div>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr>
-                                <td colspan="13" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data.</td>
+                                <td colspan="14" style="text-align:center;color:#6b7280;padding:20px;">Tidak ada data.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -399,6 +430,7 @@
             const csrf = @json(csrf_token());
             const urlUrutan = @json(route('keu.tagihan.data_urutan'));
             const urlHapus = @json(route('keu.tagihan.data_hapus'));
+            const urlDetail = @json(route('keu.tagihan.data_detail'));
 
             const selPage = document.getElementById('dtSelectPage');
             if (selPage) {
@@ -507,6 +539,101 @@
                         formRekap.submit();
                     });
                 }
+            })();
+
+            (function rowDetailExpand() {
+                function fmtRp(n) {
+                    var x = parseInt(n, 10);
+                    if (isNaN(x)) x = 0;
+                    return x.toLocaleString('id-ID');
+                }
+
+                function renderDetailPanel(panel, lines) {
+                    if (!panel) return;
+                    if (!lines || lines.length === 0) {
+                        panel.innerHTML = '<div class="dt-detail-empty">Tidak ada detail.</div>';
+                        return;
+                    }
+                    var html = '<div class="dt-detail-title">Detail tagihan</div>'
+                        + '<table class="dt-detail-table"><thead><tr>'
+                        + '<th>Kode Post</th><th>Nama Akun</th><th class="dt-num">Nominal</th>'
+                        + '</tr></thead><tbody>';
+                    lines.forEach(function (ln) {
+                        html += '<tr>'
+                            + '<td>' + (ln.kode_post || '—') + '</td>'
+                            + '<td>' + (ln.nama_akun || ln.kode_post || '—') + '</td>'
+                            + '<td class="dt-num">' + fmtRp(ln.billam || 0) + '</td>'
+                            + '</tr>';
+                    });
+                    html += '</tbody></table>';
+                    panel.innerHTML = html;
+                }
+
+                document.querySelectorAll('.dt-expand-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        var custid = parseInt(btn.getAttribute('data-custid') || '0', 10);
+                        var billcd = btn.getAttribute('data-billcd') || '';
+                        if (!custid || !billcd) return;
+
+                        var mainRow = btn.closest('tr');
+                        var detailRow = mainRow && mainRow.nextElementSibling;
+                        if (!detailRow || !detailRow.classList.contains('dt-detail-row')) return;
+
+                        var panel = detailRow.querySelector('[data-dt-detail-panel]');
+                        var isOpen = !detailRow.hidden;
+
+                        if (isOpen) {
+                            detailRow.hidden = true;
+                            btn.textContent = '+';
+                            btn.classList.remove('is-open');
+                            btn.setAttribute('aria-expanded', 'false');
+                            return;
+                        }
+
+                        detailRow.hidden = false;
+                        btn.textContent = '−';
+                        btn.classList.add('is-open');
+                        btn.setAttribute('aria-expanded', 'true');
+
+                        if (detailRow.getAttribute('data-dt-loaded') === '1') {
+                            return;
+                        }
+
+                        if (panel) {
+                            panel.innerHTML = '<div class="dt-detail-loading">Memuat detail…</div>';
+                        }
+                        btn.disabled = true;
+
+                        var u = new URL(urlDetail, window.location.origin);
+                        u.searchParams.set('custid', String(custid));
+                        u.searchParams.set('billcd', billcd);
+
+                        fetch(u.toString(), {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin'
+                        })
+                            .then(function (r) { return r.json().then(function (j) { return { okHttp: r.ok, j: j }; }); })
+                            .then(function (pack) {
+                                btn.disabled = false;
+                                var j = pack.j || {};
+                                if (!pack.okHttp || !j.ok) {
+                                    if (panel) {
+                                        panel.innerHTML = '<div class="dt-detail-empty">' + (j.message || 'Gagal memuat detail') + '</div>';
+                                    }
+                                    return;
+                                }
+                                detailRow.setAttribute('data-dt-loaded', '1');
+                                renderDetailPanel(panel, j.lines || []);
+                            })
+                            .catch(function () {
+                                btn.disabled = false;
+                                if (panel) {
+                                    panel.innerHTML = '<div class="dt-detail-empty">Gagal memuat detail.</div>';
+                                }
+                            });
+                    });
+                });
             })();
 
             function postJson(url, body) {

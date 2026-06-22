@@ -755,6 +755,32 @@ XML);
         ]);
     }
 
+    public function dataDetail(Request $request, AmalFatimahApiService $api): JsonResponse
+    {
+        $custid = (int) $request->query('custid', 0);
+        $billcd = trim((string) $request->query('billcd', ''));
+        if ($custid <= 0 || $billcd === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'custid dan billcd wajib diisi',
+            ], 422);
+        }
+
+        $data = $api->getEditManualBillDetailRows($custid, $billcd);
+        if (!empty($data['error'])) {
+            return response()->json([
+                'ok' => false,
+                'message' => $data['error'],
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'paidst' => (int) ($data['paidst'] ?? 0),
+            'lines' => $data['lines'] ?? [],
+        ]);
+    }
+
     public function dataUrutan(Request $request, AmalFatimahApiService $api): JsonResponse
     {
         $validated = $request->validate([
@@ -788,8 +814,8 @@ XML);
         $message = (string) ($res['message'] ?? '');
         if ($res['ok'] && array_key_exists('changed', $data) && $data['changed'] === false) {
             $message = $direction === 'up'
-                ? 'Urutan tidak berubah (sudah urutan terbesar untuk siswa ini).'
-                : 'Urutan tidak berubah (sudah urutan 1 untuk siswa ini).';
+                ? 'Urutan tidak berubah (sudah urutan 1 untuk siswa ini).'
+                : 'Urutan tidak berubah (sudah urutan terbesar untuk siswa ini).';
         }
 
         return response()->json([
@@ -1241,6 +1267,9 @@ XML);
             }
             $paidRaw = $r['paidst'] ?? '0';
             $isLunas = $paidRaw === '1' || $paidRaw === 1 || $paidRaw === true;
+            if ($isLunas) {
+                continue;
+            }
             if (!isset($cards[$custid])) {
                 $kelompok = trim((string) ($r['kelompok'] ?? ''));
                 if ($kelompok === '') {
@@ -1262,11 +1291,11 @@ XML);
                     : '-',
                 'tahun_aka' => trim((string) ($r['tahun_aka'] ?? '')),
                 'tagihan' => (int) ($r['tagihan'] ?? 0),
-                'status' => $isLunas ? 'Lunas' : 'Belum lunas',
+                'status' => 'Belum lunas',
             ];
         }
 
-        return $cards;
+        return array_filter($cards, static fn (array $c): bool => ($c['items'] ?? []) !== []);
     }
 
     /**

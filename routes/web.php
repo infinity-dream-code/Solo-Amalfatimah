@@ -129,6 +129,7 @@ Route::middleware(['web', 'dummy.auth'])->group(function () {
         Route::post('/tagihan-siswa/upload-tagihan-pmb/clear', [TagihanSiswaController::class, 'uploadPmbClear'])->name('tagihan.upload_pmb.clear');
         Route::post('/tagihan-siswa/upload-tagihan-pmb', [TagihanSiswaController::class, 'uploadPmbSubmit'])->name('tagihan.upload_pmb.submit');
         Route::get('/tagihan-siswa/data-tagihan', [TagihanSiswaController::class, 'data'])->name('tagihan.data');
+        Route::get('/tagihan-siswa/data-tagihan/detail', [TagihanSiswaController::class, 'dataDetail'])->name('tagihan.data_detail');
         Route::post('/tagihan-siswa/data-tagihan/urutan', [TagihanSiswaController::class, 'dataUrutan'])->name('tagihan.data_urutan');
         Route::post('/tagihan-siswa/data-tagihan/hapus', [TagihanSiswaController::class, 'dataHapus'])->name('tagihan.data_hapus');
         Route::post('/tagihan-siswa/data-tagihan/export-excel', [TagihanSiswaController::class, 'dataExportExcel'])->name('tagihan.data_export_excel');

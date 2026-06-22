@@ -3573,7 +3573,8 @@ function penerimaanBuildPenerimaanFiltersFromReq(array $req): array
 }
 
 /**
- * Data tagihan (belum & sudah lunas) untuk halaman Data Tagihan.
+ * Data tagihan belum lunas untuk halaman Data Tagihan.
+ * Tagihan sudah lunas (PAIDST = 1) tampil di Data Penerimaan, bukan di sini.
  * Pagination: LIMIT/OFFSET (+1 baris bila include_total=0, tanpa COUNT(*)).
  *
  * @return array{rows: array<int, array<string, mixed>>, total: int, has_more: bool}
@@ -3701,6 +3702,9 @@ function getDataTagihan(array $req): array
         $where[] = "(b.PAIDST = '0' OR b.PAIDST = 0 OR TRIM(CAST(b.PAIDST AS CHAR)) = '0')";
         $where[] = 'd.KodePost IS NOT NULL';
         $where[] = "TRIM(d.KodePost) <> ''";
+    } else {
+        // Halaman Data Tagihan / export / cetak rekap: hanya belum lunas.
+        $where[] = "(b.PAIDST = '0' OR b.PAIDST = 0 OR TRIM(CAST(b.PAIDST AS CHAR)) = '0')";
     }
 
     $whereSql = implode(' AND ', $where);
@@ -3882,7 +3886,7 @@ function getDataTagihan(array $req): array
 }
 
 /**
- * Tagihan untuk cetak kartu siswa: satu query per daftar CUSTID (tanpa pagination berulang).
+ * Tagihan untuk cetak kartu siswa: satu query per daftar CUSTID (belum lunas saja).
  *
  * @return array{rows: array<int, array<string, mixed>>}
  */
@@ -3907,7 +3911,10 @@ function getTagihanKartuSiswa(array $req): array
     }
 
     $thnAkademik = trim((string) ($req['thn_akademik'] ?? ''));
-    $where = ['b.FSTSBolehBayar = 1'];
+    $where = [
+        'b.FSTSBolehBayar = 1',
+        "(b.PAIDST = '0' OR b.PAIDST = 0 OR TRIM(CAST(b.PAIDST AS CHAR)) = '0')",
+    ];
     $params = [];
 
     $inParams = [];
@@ -3969,7 +3976,7 @@ function getTagihanKartuSiswa(array $req): array
 }
 
 /**
- * Cetak rekap tagihan: satu query sesuai filter (maks 50000 baris via bulk_export).
+ * Cetak rekap tagihan: satu query sesuai filter (maks 50000 baris via bulk_export), belum lunas saja.
  *
  * @return array{rows: array<int, array<string, mixed>>}
  */
@@ -4751,7 +4758,10 @@ function getDataPembayaranPerNis(array $req): array
     }
     $custidNums = array_values(array_unique($custidNums));
 
-    $where = ['b.FSTSBolehBayar = 1'];
+    $where = [
+        'b.FSTSBolehBayar = 1',
+        "(b.PAIDST = '0' OR b.PAIDST = 0 OR TRIM(CAST(b.PAIDST AS CHAR)) = '0')",
+    ];
     $params = [];
     if ($custidNums !== []) {
         $inParams = [];
@@ -6353,7 +6363,7 @@ function nextUrutanForCustid(PDO $pdo, int $custid): int
 
 /**
  * Naik/turun urutan tagihan — hanya CALL prosedur DB (sama nurhidayah).
- * Naik (angka 1→2) = UpdateUrutDOWN; Turun (2→1) = UpdateUrutUP.
+ * Naik = CALL UpdateUrutUP; Turun = CALL UpdateUrutDOWN.
  */
 function updateDataTagihanUrutan(array $req): array
 {
@@ -6387,7 +6397,7 @@ function updateDataTagihanUrutan(array $req): array
         exit;
     }
 
-    $proc = $direction === 'up' ? 'UpdateUrutDOWN' : 'UpdateUrutUP';
+    $proc = $direction === 'up' ? 'UpdateUrutUP' : 'UpdateUrutDOWN';
 
     $stBefore = $pdo->prepare('
         SELECT COALESCE(furutan, 0) AS u, TRIM(BILLCD) AS billcd

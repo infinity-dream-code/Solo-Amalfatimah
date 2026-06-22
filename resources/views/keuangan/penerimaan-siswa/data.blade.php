@@ -166,7 +166,6 @@
                 <div class="dp-actions-top">
                     <button type="button" class="dp-btn dp-btn-print" id="dpBtnKartu" title="Centang siswa di tabel lalu klik">Cetak Kartu Siswa</button>
                     <button type="button" class="dp-btn dp-btn-print" id="dpBtnKuitansi" title="Centang siswa di tabel lalu klik">Cetak Kuitansi</button>
-                    <button type="button" class="dp-btn dp-btn-print" id="dpBtnKuitansi2k" title="Sama + baris tambahan Rp 2.000">Cetak Kuitansi Dengan 2000</button>
                     <button type="button" class="dp-btn dp-btn-print-pdf" id="dpBtnRekapPdf" title="PDF rekap sesuai filter (tanggal opsional; maks. 8.000 baris)">Cetak PDF</button>
                 </div>
 
@@ -381,30 +380,20 @@
             }
 
             var dpBtnKuitansi = document.getElementById('dpBtnKuitansi');
-            var dpBtnKuitansi2k = document.getElementById('dpBtnKuitansi2k');
             var dpFormKuitansi = document.getElementById('dpFormKuitansi');
-            function dpSubmitKuitansi(dengan2k) {
-                if (!dpFormKuitansi) {
-                    return;
-                }
-                var bills = dpCollectCheckedBills();
-                if (bills.length === 0) {
-                    alert('Pilih minimal satu baris tagihan (centang di tabel).');
-                    return;
-                }
-                dpFillExportForm(dpFormKuitansi, 'data-dp-kuitansi-dyn', [
-                    ['dengan_2000', dengan2k ? '1' : '0']
-                ]);
-                bills.forEach(function (key) {
-                    dpAppendDynHidden(dpFormKuitansi, 'selected_bills[]', key, 'data-dp-kuitansi-dyn');
+            if (dpBtnKuitansi && dpFormKuitansi) {
+                dpBtnKuitansi.addEventListener('click', function () {
+                    var bills = dpCollectCheckedBills();
+                    if (bills.length === 0) {
+                        alert('Pilih minimal satu baris tagihan (centang di tabel).');
+                        return;
+                    }
+                    dpFillExportForm(dpFormKuitansi, 'data-dp-kuitansi-dyn', null);
+                    bills.forEach(function (key) {
+                        dpAppendDynHidden(dpFormKuitansi, 'selected_bills[]', key, 'data-dp-kuitansi-dyn');
+                    });
+                    dpFormKuitansi.submit();
                 });
-                dpFormKuitansi.submit();
-            }
-            if (dpBtnKuitansi) {
-                dpBtnKuitansi.addEventListener('click', function () { dpSubmitKuitansi(false); });
-            }
-            if (dpBtnKuitansi2k) {
-                dpBtnKuitansi2k.addEventListener('click', function () { dpSubmitKuitansi(true); });
             }
 
             var dpBtnRekapPdf = document.getElementById('dpBtnRekapPdf');

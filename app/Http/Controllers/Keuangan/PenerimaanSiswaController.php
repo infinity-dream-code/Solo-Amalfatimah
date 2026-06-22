@@ -144,10 +144,13 @@ class PenerimaanSiswaController extends Controller
     public function printKartuSiswa(Request $request, AmalFatimahApiService $api): Response|RedirectResponse
     {
         $selectedBills = $this->selectedBillsFromRequest($request);
-        if ($selectedBills === []) {
-            return redirect()->back()->with('export_error', 'Pilih minimal satu baris tagihan (centang di tabel).');
+        $custids = $selectedBills !== []
+            ? array_values(array_unique(array_column($selectedBills, 'custid')))
+            : $this->custidsFromRequest($request);
+
+        if ($custids === []) {
+            return redirect()->back()->with('export_error', 'Pilih minimal satu siswa atau baris tagihan (centang di tabel).');
         }
-        $custids = array_values(array_unique(array_column($selectedBills, 'custid')));
 
         $filters = $this->penerimaanFiltersFromPost($request);
 
@@ -480,6 +483,27 @@ class PenerimaanSiswaController extends Controller
         }
 
         return $out;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function custidsFromRequest(Request $request): array
+    {
+        $raw = $request->input('custids', []);
+        if (!is_array($raw)) {
+            $raw = $raw !== null && $raw !== '' ? [$raw] : [];
+        }
+
+        $out = [];
+        foreach ($raw as $v) {
+            $n = (int) $v;
+            if ($n > 0) {
+                $out[$n] = true;
+            }
+        }
+
+        return array_map('intval', array_keys($out));
     }
 
     private function penerimaanFiltersFromPost(Request $request): array

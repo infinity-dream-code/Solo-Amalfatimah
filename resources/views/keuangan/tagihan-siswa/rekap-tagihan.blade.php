@@ -34,6 +34,7 @@
     <div class="rk-wrap">
         <div class="rk-card">
             <div class="rk-title">Rekap Tagihan</div>
+            <p style="padding:0 16px 10px;font-size:12px;color:#6b7280;margin:0;">Hanya tagihan <strong>belum lunas</strong>. Tagihan sudah dibayar tampil di menu Rekap Penerimaan.</p>
             @if (session('export_error'))
                 <div class="rk-err">{{ session('export_error') }}</div>
             @endif

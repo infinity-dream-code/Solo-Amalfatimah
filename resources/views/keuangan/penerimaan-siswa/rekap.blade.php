@@ -287,15 +287,16 @@
                 });
             }
 
-            function rpCollectCheckedCustIds() {
-                var ids = [];
+            function rpCollectCheckedBills() {
+                var keys = [];
                 document.querySelectorAll('.rp-row-cb:checked').forEach(function (cb) {
-                    var id = parseInt(cb.getAttribute('data-custid') || '0', 10);
-                    if (id > 0) {
-                        ids.push(id);
+                    var cid = parseInt(cb.getAttribute('data-custid') || '0', 10);
+                    var bcd = (cb.getAttribute('data-billcd') || '').trim();
+                    if (cid > 0 && bcd !== '') {
+                        keys.push(cid + '|' + bcd);
                     }
                 });
-                return ids.filter(function (v, i, a) { return a.indexOf(v) === i; });
+                return keys.filter(function (v, i, a) { return a.indexOf(v) === i; });
             }
 
             function rpAppendDynHidden(form, name, value, dataAttr) {
@@ -338,14 +339,14 @@
             var rpFormKartu = document.getElementById('rpFormKartu');
             if (rpBtnKartu && rpFormKartu) {
                 rpBtnKartu.addEventListener('click', function () {
-                    var ids = rpCollectCheckedCustIds();
-                    if (ids.length === 0) {
-                        alert('Pilih minimal satu siswa (centang baris di tabel).');
+                    var bills = rpCollectCheckedBills();
+                    if (bills.length === 0) {
+                        alert('Pilih minimal satu baris (centang di tabel).');
                         return;
                     }
                     rpFillExportForm(rpFormKartu, 'data-rp-kartu-dyn');
-                    ids.forEach(function (id) {
-                        rpAppendDynHidden(rpFormKartu, 'custids[]', id, 'data-rp-kartu-dyn');
+                    bills.forEach(function (key) {
+                        rpAppendDynHidden(rpFormKartu, 'selected_bills[]', key, 'data-rp-kartu-dyn');
                     });
                     rpFormKartu.submit();
                 });
@@ -395,7 +396,7 @@
                                 var no = (j.first_item || 0) + idx;
                                 var hay = esc((r.search_hay || '').replace(/"/g, ''));
                                 return '<tr class="rp-data-row" data-rp-hay="' + hay + '">' +
-                                    '<td class="rp-check"><input type="checkbox" class="rp-row-cb" data-custid="' + esc(String(r.custid || r.CUSTID || 0)) + '"></td>' +
+                                    '<td class="rp-check"><input type="checkbox" class="rp-row-cb" data-custid="' + esc(String(r.custid || r.CUSTID || 0)) + '" data-billcd="' + escAttr(r.billcd || r.BILLCD || '') + '"></td>' +
                                     '<td>' + esc(no) + '</td>' +
                                     '<td>' + esc(r.nis || '-') + '</td>' +
                                     '<td>' + esc(r.nama || '-') + '</td>' +
